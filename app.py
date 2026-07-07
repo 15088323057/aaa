@@ -84,9 +84,8 @@ def login():
         if user and check_password_hash(user["password"], password):
             # 登录成功：清除该 IP 的失败记录
             LOGIN_ATTEMPTS.pop(client_ip, None)
+            session.clear()
             session["username"] = username
-            # 重新生成 session ID 防止 session 固定攻击
-            session.regenerate()
             user_info = get_user_info(username)
             return render_template("index.html", user=user_info)
         else:
