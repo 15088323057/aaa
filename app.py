@@ -1,10 +1,11 @@
 import os
 import secrets
+import sqlite3
 from functools import wraps
 from datetime import datetime, timedelta
 
 from flask import Flask, render_template, request, redirect, session, abort, send_file
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
 
@@ -14,33 +15,40 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 # 登录失败记录，用于简单速率限制
 LOGIN_ATTEMPTS = {}
 
-# ─── 用户数据库（密码已使用 scrypt 哈希） ───────────────────────────────
-USERS = {
-    "admin": {
-        "username": "admin",
-        "password": generate_password_hash("admin123"),
-        "role": "admin",
-        "email": "admin@example.com",
-        "phone": "13800138000",
-        "balance": 99999
-    },
-    "alice": {
-        "username": "alice",
-        "password": generate_password_hash("alice2025"),
-        "role": "user",
-        "email": "alice@example.com",
-        "phone": "13900139001",
-        "balance": 100
-    }
-}
+# 数据库路径
+DB_PATH = os.path.join(os.path.dirname(__file__), "users.db")
+
+
+# ─── 数据库操作函数 ───────────────────────────────────────────────
+
+def get_db():
+    """获取数据库连接（每次请求独立连接，用完自动关闭）"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row  # 让查询结果支持用字段名访问
+    return conn
+
+
+def get_user_by_username(username):
+    """根据用户名查询用户（包含密码字段）"""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if row:
+            return dict(row)  # sqlite3.Row → 普通字典
+        return None
+    finally:
+        conn.close()
 
 
 def get_user_info(username):
     """返回不包含密码字段的用户信息"""
-    if username in USERS:
-        info = USERS[username].copy()
-        info.pop("password", None)
-        return info
+    user = get_user_by_username(username)
+    if user:
+        user.pop("password", None)
+        user.pop("id", None)
+        return user
     return None
 
 
@@ -48,7 +56,6 @@ def check_login_rate_limit(ip):
     """简单的登录频率限制：同一 IP 5 分钟内失败超过 5 次则临时封禁"""
     now = datetime.now()
     if ip in LOGIN_ATTEMPTS:
-        # 清理过期记录
         LOGIN_ATTEMPTS[ip] = [
             t for t in LOGIN_ATTEMPTS[ip] if now - t < timedelta(minutes=5)
         ]
@@ -56,6 +63,8 @@ def check_login_rate_limit(ip):
             return False
     return True
 
+
+# ─── 路由 ─────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
@@ -79,10 +88,11 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
-        # 验证用户名和密码（使用安全哈希比对）
-        user = USERS.get(username)
+        # 从数据库查询用户（密码哈希存储在数据库中）
+        user = get_user_by_username(username)
+
         if user and check_password_hash(user["password"], password):
-            # 登录成功：清除该 IP 的失败记录
+            # 登录成功
             LOGIN_ATTEMPTS.pop(client_ip, None)
             session.clear()
             session["username"] = username
@@ -110,6 +120,12 @@ def download_report():
 
 
 if __name__ == "__main__":
-    # 生产环境不要开启 debug 模式
+    # 检查数据库是否已初始化
+    if not os.path.exists(DB_PATH):
+        print("⚠️  数据库文件不存在！请先运行：")
+        print("   python3 db_init.py")
+        print("然后重新启动本应用。\n")
+        exit(1)
+
     debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
     app.run(debug=debug_mode, host="0.0.0.0", port=5000)
