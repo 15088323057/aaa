@@ -3,7 +3,7 @@ import secrets
 from functools import wraps
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, redirect, session, abort
+from flask import Flask, render_template, request, redirect, session, abort, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -101,6 +101,13 @@ def login():
 def logout():
     session.clear()
     return redirect("/")
+
+
+@app.route("/report")
+def download_report():
+    """下载安全漏洞审计报告"""
+    report_path = os.path.join(os.path.dirname(__file__), "安全漏洞审计报告.docx")
+    return send_file(report_path, as_attachment=True, download_name="安全漏洞审计报告.docx")
 
 
 if __name__ == "__main__":
