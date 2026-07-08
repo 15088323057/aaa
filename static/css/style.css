@@ -177,3 +177,99 @@ body {
     display: inline-block;
     min-width: 80px;
 }
+
+/* ─── 搜索样式 ─── */
+.search-form {
+    margin-top: 8px;
+}
+
+.search-box {
+    display: flex;
+    gap: 8px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.search-btn {
+    width: auto;
+    margin-top: 0;
+    white-space: nowrap;
+    padding: 10px 20px;
+}
+
+/* ─── 搜索结果表格 ─── */
+.search-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.search-table thead th {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+}
+
+.search-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.search-table tbody tr:nth-child(even) {
+    background-color: #fafafa;
+}
+
+.search-table tbody tr:hover {
+    background-color: #f0f2ff;
+}
+
+/* ─── 无搜索结果 ─── */
+.no-result {
+    color: #999;
+    text-align: center;
+    padding: 20px;
+    font-size: 14px;
+}
+
+/* ─── 成功消息 ─── */
+.success-msg {
+    background-color: #f6ffed;
+    border: 1px solid #b7eb8f;
+    border-radius: 4px;
+    color: #389e0d;
+    padding: 10px 14px;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+/* ─── 表单底部链接 ─── */
+.form-footer {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #999;
+}
+
+.form-footer a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.form-footer a:hover {
+    text-decoration: underline;
+}

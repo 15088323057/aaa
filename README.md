@@ -5,6 +5,8 @@
 ## 功能
 
 - ✅ 用户登录（含频率限制，防暴力破解）
+- ✅ 用户注册（SQL 使用 f-string 拼接 — 含 SQL 注入漏洞，用于教学演示）
+- ✅ 用户搜索（SQL 使用 f-string 拼接 — 含 SQL 注入漏洞，用于教学演示）
 - ✅ 用户信息展示（用户名、邮箱、手机、角色、余额）
 - ✅ 密码安全存储（scrypt 哈希）
 - ✅ 安全漏洞审计报告下载
@@ -17,28 +19,17 @@
 pip install flask werkzeug
 ```
 
-### 2. 初始化数据库
-
-```bash
-python3 db_init.py
-```
-
-执行后会在当前目录生成 `users.db` 文件，包含以下预置用户：
-
-| 用户名 | 密码 | 角色 | 邮箱 | 手机 | 余额 |
-|--------|------|------|------|------|------|
-| admin | admin123 | admin | admin@example.com | 13800138000 | 99999 |
-| alice | alice2025 | user | alice@example.com | 13900139001 | 100 |
-
-### 3. 启动服务
+### 2. 启动服务（数据库自动初始化）
 
 ```bash
 python3 app.py
 ```
 
+首次启动会自动创建 `data/users.db`，并插入预置用户。
+
 访问 http://127.0.0.1:5000
 
-### 4. 下载安全报告
+### 3. 下载安全报告
 
 启动服务后访问：http://127.0.0.1:5000/report
 
@@ -46,17 +37,18 @@ python3 app.py
 
 ```
 .
-├── app.py              # Flask 主应用（路由 + 数据库操作）
-├── db_init.py          # 数据库初始化脚本（首次运行前执行）
-├── users.db            # SQLite 用户数据库（自动生成，不提交到 Git）
+├── app.py              # Flask 主应用（路由 + 数据库操作 + 自动初始化）
+├── data/
+│   └── users.db        # SQLite 用户数据库（自动生成，不提交到 Git）
 ├── generate_report.py  # Word 漏洞报告生成脚本
 ├── 安全漏洞审计报告.docx # 安全审计报告
 ├── .gitignore
 ├── README.md
 ├── templates/
 │   ├── base.html       # 基础模板（导航栏、布局）
-│   ├── index.html      # 首页（用户信息展示）
-│   └── login.html      # 登录页
+│   ├── index.html      # 首页（用户信息展示 + 搜索）
+│   ├── login.html      # 登录页
+│   └── register.html   # 注册页
 └── static/
     └── css/
         └── style.css   # 样式文件
@@ -73,27 +65,40 @@ python3 app.py
 
 ## 数据库说明
 
-用户数据存储在 `users.db`（SQLite）中，与代码分离。首次运行需执行：
+用户数据存储在 `data/users.db`（SQLite）中，应用启动时自动初始化。
 
-```bash
-python3 db_init.py
-```
+预置用户：
 
-初始化后 `users.db` 包含 `users` 表，结构如下：
+| 用户名 | 密码 | 邮箱 | 手机 |
+|--------|------|------|------|
+| admin | admin123 | admin@example.com | 13800138000 |
+| alice | alice2025 | alice@example.com | 13900139001 |
+
+表结构：
 
 ```sql
 CREATE TABLE users (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,        -- scrypt 哈希值
-    role     TEXT NOT NULL,
     email    TEXT,
-    phone    TEXT,
-    balance  REAL DEFAULT 0.0
+    phone    TEXT
 );
 ```
 
-> ⚠️ `users.db` 已在 `.gitignore` 中忽略，不会上传到 Git 仓库。
+## SQL 注入演示
+
+> ⚠️ **注意**：注册和搜索功能**故意**使用 f-string 拼接 SQL 语句，存在 SQL 注入漏洞，仅用于教学演示。
+
+### 注册功能
+- 使用 `f"INSERT INTO users ... VALUES ('{username}', ...)"` 拼接 SQL
+- 启动服务后在控制台查看生成的 SQL 语句
+
+### 搜索功能
+- 使用 `f"SELECT ... WHERE username LIKE '%{keyword}%'"` 拼接 SQL
+- 启动服务后在控制台查看生成的 SQL 语句
+
+> 登录验证使用参数化查询，是安全的。
 
 ## 许可
 
