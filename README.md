@@ -86,19 +86,15 @@ CREATE TABLE users (
 );
 ```
 
-## SQL 注入演示
+## 安全特性
 
-> ⚠️ **注意**：注册和搜索功能**故意**使用 f-string 拼接 SQL 语句，存在 SQL 注入漏洞，仅用于教学演示。
-
-### 注册功能
-- 使用 `f"INSERT INTO users ... VALUES ('{username}', ...)"` 拼接 SQL
-- 启动服务后在控制台查看生成的 SQL 语句
-
-### 搜索功能
-- 使用 `f"SELECT ... WHERE username LIKE '%{keyword}%'"` 拼接 SQL
-- 启动服务后在控制台查看生成的 SQL 语句
-
-> 登录验证使用参数化查询，是安全的。
+- **密码哈希存储**：使用 werkzeug.security 的 scrypt 算法哈希存储，不可逆
+- **密码安全比对**：使用 check_password_hash() 恒定时间比对，防时序攻击
+- **密钥管理**：secret_key 从环境变量读取，默认随机生成
+- **速率限制**：同一 IP 5 分钟内登录失败超过 5 次则临时封禁
+- **Session 加固**：登录成功后清除旧 session，防固定攻击
+- **数据代码分离**：用户数据存储在独立的 SQLite 数据库中，不写在代码里
+- **SQL 注入防护**：所有 SQL 查询均使用参数化查询（`?` 占位符），杜绝 SQL 注入风险
 
 ## 许可
 

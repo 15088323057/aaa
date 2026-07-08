@@ -141,7 +141,7 @@ def login():
     return render_template("login.html")
 
 
-# ─── 注册（SQL 使用 f-string 拼接 — 存在 SQL 注入风险） ─────
+# ─── 注册（已修复 — 使用参数化查询） ────────────────────────────
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -154,19 +154,19 @@ def register():
         if not username or not password:
             return render_template("register.html", error="用户名和密码不能为空")
 
-        # ⚠️ 密码先哈希，再通过 f-string 拼入 SQL
+        # 密码先哈希
         hashed_pw = generate_password_hash(password)
 
-        # ⚠️ 故意使用 f-string 拼接 SQL（存在 SQL 注入漏洞）
-        sql = f"INSERT OR IGNORE INTO users (username, password, email, phone) VALUES ('{username}', '{hashed_pw}', '{email}', '{phone}')"
-        print(f"📝 [注册SQL] {sql}", flush=True)
+        # ✅ 已修复：使用参数化查询，防止 SQL 注入
+        sql = "INSERT OR IGNORE INTO users (username, password, email, phone) VALUES (?, ?, ?, ?)"
+        print(f"📝 [注册SQL] {sql} | 参数: username={username}", flush=True)
 
         conn = get_db()
         try:
-            conn.execute(sql)
+            conn.execute(sql, (username, hashed_pw, email, phone))
             conn.commit()
 
-            # 检查是否真的插入了（username 可能已存在导致 IGNORE）
+            # 检查是否真的插入了
             check = conn.execute(
                 "SELECT * FROM users WHERE username = ?", (username,)
             ).fetchone()
@@ -185,7 +185,7 @@ def register():
     return render_template("register.html", msg=msg)
 
 
-# ─── 搜索（SQL 使用 f-string 拼接 — 存在 SQL 注入风险） ─────
+# ─── 搜索（已修复 — 使用参数化查询） ────────────────────────────
 
 @app.route("/search")
 def search():
@@ -196,18 +196,19 @@ def search():
     if not keyword:
         return render_template("index.html", user=user_info, search_results=None, keyword="")
 
-    # ⚠️ 故意使用 f-string 拼接 SQL（存在 SQL 注入漏洞）
-    sql = f"SELECT id, username, email, phone FROM users WHERE username LIKE '%{keyword}%' OR email LIKE '%{keyword}%'"
-    print(f"🔍 [搜索SQL] {sql}", flush=True)
+    # ✅ 已修复：使用参数化查询，防止 SQL 注入
+    sql = "SELECT id, username, email, phone FROM users WHERE username LIKE ? OR email LIKE ?"
+    like_pattern = f"%{keyword}%"
+    print(f"🔍 [搜索SQL] {sql} | 参数: '%{keyword}%'", flush=True)
 
     conn = get_db()
     try:
-        rows = conn.execute(sql).fetchall()
+        rows = conn.execute(sql, (like_pattern, like_pattern)).fetchall()
         results = [dict(row) for row in rows]
-        print(f"    → 找到 {len(results)} 条结果")
+        print(f"    → 找到 {len(results)} 条结果", flush=True)
         return render_template("index.html", user=user_info, search_results=results, keyword=keyword)
     except Exception as e:
-        print(f"❌ 搜索出错: {e}")
+        print(f"❌ 搜索出错: {e}", flush=True)
         return render_template("index.html", user=user_info, search_results=[], keyword=keyword, search_error="SQL 执行出错")
     finally:
         conn.close()
