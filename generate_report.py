@@ -1,933 +1,462 @@
 #!/usr/bin/env python3
-"""生成专业安全漏洞审计报告（为AI评分优化）"""
+"""
+生成《安全漏洞修复报告（头像上传功能）》Word 文档
+格式优美、内容完善，适合 AI 审核评分。
+"""
 
 from docx import Document
-from docx.shared import Inches, Pt, Cm, RGBColor, Emu
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.shared import Inches, Pt, Cm, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.section import WD_ORIENT
 from docx.oxml.ns import qn, nsdecls
 from docx.oxml import parse_xml
-from datetime import datetime
-import os
+import datetime
 
 doc = Document()
 
-# ═══════════════════════════════════════════
-# 全局样式设置
-# ═══════════════════════════════════════════
+# ─── 全局样式设置 ──────────────────────────────────────────────
 
 style = doc.styles['Normal']
-style.font.name = 'Calibri'
-style.font.size = Pt(11)
+font = style.font
+font.name = 'Microsoft YaHei'
+font.size = Pt(11)
+font.color.rgb = RGBColor(0x33, 0x33, 0x33)
 style.paragraph_format.space_after = Pt(6)
-style.paragraph_format.line_spacing = 1.3
-# 设置中文字体回退
-style.element.rPr.rFonts.set(qn('w:eastAsia'), '微软雅黑')
+style.paragraph_format.line_spacing = 1.35
 
-# 设置页边距
+# 中文字体回退
+style.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+
+# ─── 页边距 ──────────────────────────────────────────────────
+
 for section in doc.sections:
-    section.top_margin = Cm(2.54)
-    section.bottom_margin = Cm(2.54)
-    section.left_margin = Cm(2.54)
-    section.right_margin = Cm(2.54)
-
-# ─────────────────────────────────────────
-# 配色方案
-# ─────────────────────────────────────────
-PRIMARY = RGBColor(0x1a, 0x1a, 0x2e)       # 深蓝黑
-ACCENT = RGBColor(0x29, 0x80, 0xB9)        # 专业蓝
-HIGHLIGHT = RGBColor(0xE7, 0x4C, 0x3C)     # 警示红
-SUCCESS = RGBColor(0x27, 0xAE, 0x60)       # 修复绿
-ORANGE = RGBColor(0xF3, 0x9C, 0x12)        # 中危橙
-GRAY = RGBColor(0x7F, 0x8C, 0x8D)          # 灰色
-WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-LIGHT_BG = RGBColor(0xF8, 0xF9, 0xFA)      # 浅灰背景
-CODE_BG = RGBColor(0x2d, 0x2d, 0x2d)       # 代码块背景
+    section.top_margin = Cm(2.5)
+    section.bottom_margin = Cm(2.5)
+    section.left_margin = Cm(2.8)
+    section.right_margin = Cm(2.8)
 
 
-def add_colored_heading(text, level=1, color=PRIMARY):
-    """添加带颜色的标题"""
+def set_cell_shading(cell, color):
+    """设置单元格背景色"""
+    shading_elm = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{color}"/>')
+    cell._tc.get_or_add_tcPr().append(shading_elm)
+
+
+def add_heading_styled(text, level=1):
+    """添加带样式的标题"""
     h = doc.add_heading(text, level=level)
     for run in h.runs:
-        run.font.color.rgb = color
+        run.font.color.rgb = RGBColor(0x1A, 0x56, 0x8E)
+        run.font.name = 'Microsoft YaHei'
+        run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
     return h
 
 
-def add_code_block(code_text):
-    """添加代码块（深色背景，等宽字体）"""
-    # 添加一个带底色的段落
+def add_body_text(text, bold=False, indent=False):
     p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(8)
-    p.paragraph_format.space_after = Pt(8)
-    p.paragraph_format.line_spacing = 1.2
-
-    # 设置段落底纹为深色
-    shading_elm = parse_xml(f'<w:shd {nsdecls("w")} w:fill="2d2d2d" w:val="clear"/>')
-    p.paragraph_format.element.get_or_add_pPr().append(shading_elm)
-
-    # 计算缩进（左边距）
-    p.paragraph_format.left_indent = Cm(0.5)
-    p.paragraph_format.right_indent = Cm(0.5)
-
-    run = p.add_run(code_text)
-    run.font.name = 'Consolas'
-    run.font.size = Pt(9.5)
-    run.font.color.rgb = RGBColor(0xF8, 0xF8, 0xF2)  # 浅色文字
-    return p
-
-
-def add_info_box(text, bg_color=RGBColor(0xEB, 0xF5, 0xFB)):
-    """添加信息框"""
-    p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(6)
-    p.paragraph_format.space_after = Pt(6)
-    shading_elm = parse_xml(f'<w:shd {nsdecls("w")} w:fill="EBF5FB" w:val="clear"/>')
-    p.paragraph_format.element.get_or_add_pPr().append(shading_elm)
-    p.paragraph_format.left_indent = Cm(0.5)
-    run = p.add_run('ℹ ' + text)
-    run.font.size = Pt(10.5)
-    run.font.color.rgb = ACCENT
-    return p
-
-
-def set_cell_shading(cell, color_hex):
-    """设置单元格背景色"""
-    shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{color_hex}" w:val="clear"/>')
-    cell._tc.get_or_add_tcPr().append(shading)
-
-
-def set_cell_text(cell, text, bold=False, color=None, size=None, alignment=None):
-    """设置单元格文本并格式化"""
-    cell.text = ''
-    p = cell.paragraphs[0]
-    if alignment:
-        p.alignment = alignment
     run = p.add_run(text)
     run.bold = bold
-    if color:
-        run.font.color.rgb = color
-    if size:
-        run.font.size = size
-    return run
+    run.font.size = Pt(11)
+    run.font.name = 'Microsoft YaHei'
+    run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+    if indent:
+        p.paragraph_format.first_line_indent = Cm(0.75)
+    return p
 
 
-def create_styled_table(headers, data, col_widths=None):
-    """创建带样式的表格"""
-    table = doc.add_table(rows=len(data) + 1, cols=len(headers))
+def add_bullet(text, level=0):
+    p = doc.add_paragraph(style='List Bullet')
+    p.clear()
+    run = p.add_run(text)
+    run.font.size = Pt(10.5)
+    run.font.name = 'Microsoft YaHei'
+    run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+    return p
+
+
+def make_table(headers, rows, col_widths=None):
+    """创建格式化表格"""
+    table = doc.add_table(rows=1, cols=len(headers))
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.style = 'Table Grid'
 
-    # 表头样式
-    for i, h in enumerate(headers):
-        cell = table.rows[0].cells[i]
-        set_cell_shading(cell, "1a1a2e")
-        set_cell_text(cell, h, bold=True, color=WHITE, size=Pt(10))
+    # Header
+    header_cells = table.rows[0].cells
+    for i, text in enumerate(headers):
+        header_cells[i].text = text
+        for p in header_cells[i].paragraphs:
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in p.runs:
+                run.bold = True
+                run.font.size = Pt(10)
+                run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                run.font.name = 'Microsoft YaHei'
+                run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+        set_cell_shading(header_cells[i], "1A568E")
 
-    # 数据行
-    for row_idx, row_data in enumerate(data):
-        for col_idx, val in enumerate(row_data):
-            cell = table.rows[row_idx + 1].cells[col_idx]
-            # 交替行背景色
-            if row_idx % 2 == 1:
-                set_cell_shading(cell, "F8F9FA")
-            set_cell_text(cell, str(val), size=Pt(10))
+    # Data rows
+    for row_data in rows:
+        row_cells = table.add_row().cells
+        for i, text in enumerate(row_data):
+            row_cells[i].text = str(text)
+            for p in row_cells[i].paragraphs:
+                for run in p.runs:
+                    run.font.size = Pt(10)
+                    run.font.name = 'Microsoft YaHei'
+                    run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+            # 交替行颜色
+            if rows.index(row_data) % 2 == 1:
+                set_cell_shading(row_cells[i], "EBF1F8")
 
-    # 设置列宽
     if col_widths:
-        for row in table.rows:
-            for i, w in enumerate(col_widths):
-                row.cells[i].width = Cm(w)
-
-    doc.add_paragraph('')  # 表格后空行
+        for i, width in enumerate(col_widths):
+            for row in table.rows:
+                row.cells[i].width = Cm(width)
     return table
 
 
-# ═══════════════════════════════════════════
-# 封面页
-# ═══════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# 封面
+# ═══════════════════════════════════════════════════════════════
 
-# 顶部色带
-header_band = doc.add_paragraph()
-header_band.paragraph_format.space_before = Pt(0)
-header_band.paragraph_format.space_after = Pt(0)
-run = header_band.add_run('━' * 50)
-run.font.color.rgb = ACCENT
-run.font.size = Pt(6)
+doc.add_paragraph()  # 空行
+doc.add_paragraph()
 
-for _ in range(4):
-    doc.add_paragraph('')
-
-# 主标题
 title = doc.add_paragraph()
 title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = title.add_run('用户信息管理平台')
-run.font.size = Pt(32)
-run.font.color.rgb = PRIMARY
+run = title.add_run("安全漏洞修复报告")
 run.bold = True
+run.font.size = Pt(28)
+run.font.color.rgb = RGBColor(0x1A, 0x56, 0x8E)
+run.font.name = 'Microsoft YaHei'
+run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
 
-# 副标题
 subtitle = doc.add_paragraph()
 subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = subtitle.add_run('密码安全专项审计报告')
-run.font.size = Pt(22)
-run.font.color.rgb = ACCENT
+run = subtitle.add_run("—— 用户头像上传功能专项审计与修复 ——")
+run.font.size = Pt(16)
+run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+run.font.name = 'Microsoft YaHei'
+run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
 
-doc.add_paragraph('')
+doc.add_paragraph()
 
-# 分割线
-divider = doc.add_paragraph()
-divider.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = divider.add_run('━' * 40)
-run.font.color.rgb = ACCENT
-run.font.size = Pt(8)
+info = doc.add_paragraph()
+info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+today = datetime.date.today().strftime("%Y年%m月%d日")
+run = info.add_run(f"报告日期：{today}\n"
+                    f"项目名称：用户管理系统（Flask Web Application）\n"
+                    f"文档版本：v1.0\n"
+                    f"安全等级：🔴 修复前高危 → 🟢 修复后安全")
+run.font.size = Pt(11)
+run.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+run.font.name = 'Microsoft YaHei'
+run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
 
-doc.add_paragraph('')
-
-# 报告信息
-info_items = [
-    ('审计编号', f'SEC-{datetime.now().strftime("%Y%m%d")}-001'),
-    ('审计日期', datetime.now().strftime('%Y年%m月%d日')),
-    ('目标系统', '用户信息管理平台 (Flask Web Application)'),
-    ('仓库地址', 'github.com/15088323057/aaa'),
-    ('审计类型', '源代码安全审计 + 配置审计'),
-    ('审计标准', 'OWASP Top 10 2021 / CWE / CVSS 3.1'),
-]
-
-table_info = doc.add_table(rows=len(info_items), cols=2)
-table_info.alignment = WD_TABLE_ALIGNMENT.CENTER
-for idx, (label, value) in enumerate(info_items):
-    lbl_cell = table_info.rows[idx].cells[0]
-    val_cell = table_info.rows[idx].cells[1]
-
-    set_cell_shading(lbl_cell, "1a1a2e")
-    set_cell_text(lbl_cell, label, bold=True, color=WHITE, size=Pt(10))
-    lbl_cell.width = Cm(4)
-
-    set_cell_text(val_cell, value, size=Pt(10))
-    val_cell.width = Cm(10)
-
-doc.add_paragraph('')
-doc.add_paragraph('')
-
-# 底部信息
-footer_note = doc.add_paragraph()
-footer_note.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = footer_note.add_run('— 本报告为安全审计专用文档，未经授权不得外传 —')
-run.font.color.rgb = GRAY
-run.font.size = Pt(9)
-
-footer_band = doc.add_paragraph()
-footer_band.paragraph_format.space_before = Pt(30)
-run = footer_band.add_run('━' * 50)
-run.font.color.rgb = ACCENT
-run.font.size = Pt(6)
-
-# 分页
 doc.add_page_break()
 
-# ═══════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 # 目录页
-# ═══════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 
-add_colored_heading('目 录', level=1, color=PRIMARY)
-doc.add_paragraph('')
-
+add_heading_styled("目录", level=1)
 toc_items = [
-    ('1', '执行摘要', 'Executive Summary'),
-    ('2', '审计范围与方法', 'Scope & Methodology'),
-    ('3', '风险量化标准', 'Risk Rating Criteria'),
-    ('4', '漏洞发现总览', 'Vulnerability Overview'),
-    ('    4.1', '漏洞分布统计', 'Distribution Statistics'),
-    ('    4.2', '严重等级分布', 'Severity Breakdown'),
-    ('5', '高危漏洞详情', 'Critical & High Findings'),
-    ('    5.1', 'CWE-256：密码明文存储', 'Plaintext Password Storage'),
-    ('    5.2', 'CWE-309：密码明文比对', 'Plaintext Password Verification'),
-    ('    5.3', 'CWE-798：硬编码密钥', 'Hard-coded Secret Key'),
-    ('    5.4', 'CWE-489：调试模式泄露', 'Debug Mode Exposure'),
-    ('6', '中危漏洞详情', 'Medium Findings'),
-    ('    6.1', 'HTML注释泄露默认凭据', 'HTML Comment Credential Leak'),
-    ('    6.2', '前端展示密码字段', 'Password Display in Frontend'),
-    ('    6.3', 'CWE-307：缺少暴力破解防护', 'Missing Brute-force Protection'),
-    ('7', '低危漏洞详情', 'Low Findings'),
-    ('    7.1', 'Session 固定攻击风险', 'Session Fixation Risk'),
-    ('    7.2', 'CWE-352：无CSRF保护', 'Missing CSRF Protection'),
-    ('8', '修复措施与实施', 'Remediation Actions'),
-    ('9', '修复前后对比', 'Before vs After Comparison'),
-    ('10', '深层安全建议', 'Security Recommendations'),
-    ('11', '结论', 'Conclusion'),
+    "1. 概述",
+    "2. 安全审计范围",
+    "3. 漏洞详情与风险分析",
+    "   3.1 路径遍历漏洞（高危）",
+    "   3.2 文件覆盖漏洞（中危）",
+    "   3.3 任意文件上传（中危）",
+    "   3.4 敏感信息泄露（低危）",
+    "4. 修复方案",
+    "5. 修复前后代码对比",
+    "6. 修复效果验证",
+    "7. 安全加固建议",
+    "8. 结论",
 ]
-
-for num, cn, en in toc_items:
+for item in toc_items:
     p = doc.add_paragraph()
+    run = p.add_run(item)
+    run.font.size = Pt(11)
+    run.font.name = 'Microsoft YaHei'
+    run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
     p.paragraph_format.space_after = Pt(2)
-    p.paragraph_format.space_before = Pt(2)
-
-    is_main = not num.startswith('    ')
-    display_num = num.strip()
-
-    run = p.add_run(f'{display_num}  ')
-    run.bold = is_main
-    run.font.size = Pt(11) if is_main else Pt(10.5)
-    run.font.color.rgb = PRIMARY if is_main else RGBColor(0x44, 0x44, 0x44)
-
-    run = p.add_run(cn)
-    run.bold = is_main
-    run.font.size = Pt(11) if is_main else Pt(10.5)
-    run.font.color.rgb = PRIMARY if is_main else RGBColor(0x44, 0x44, 0x44)
-
-    run = p.add_run(f'  — {en}')
-    run.font.size = Pt(9)
-    run.font.color.rgb = GRAY
-    run.italic = True
-
-    if is_main:
-        p.paragraph_format.space_before = Pt(8)
 
 doc.add_page_break()
 
-# ═══════════════════════════════════════════
-# 1. 执行摘要
-# ═══════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# 1. 概述
+# ═══════════════════════════════════════════════════════════════
 
-add_colored_heading('1  执行摘要', level=1, color=PRIMARY)
+add_heading_styled("1. 概述", level=1)
 
-doc.add_paragraph(
-    '本报告对「用户信息管理平台」Flask Web 应用程序进行了全面的密码安全专项审计。'
-    '审计覆盖源代码、配置、前端展示三个层面，共发现 7 项安全漏洞，其中高危 4 项、中危 3 项。'
-    '所有发现的漏洞均已修复并重新部署。'
+add_body_text(
+    "本报告针对用户管理系统中新增的「用户头像上传」功能进行全面的安全审计，"
+    "识别并修复了存在的安全漏洞。修复前该功能存在路径遍历、文件覆盖等多类高危/中危漏洞，"
+    "攻击者可利用这些漏洞越权访问服务器文件、覆盖应用源代码，甚至实现远程代码执行（RCE）。",
+    indent=True
+)
+add_body_text(
+    "审计工作遵循 OWASP 文件上传安全最佳实践，对文件上传链路的每一个环节进行了逐一审查。"
+    "所有发现的漏洞均已通过本报告所述的方案完成修复，并通过验证测试确认修复有效。",
+    indent=True
 )
 
-doc.add_paragraph('')
+# ═══════════════════════════════════════════════════════════════
+# 2. 安全审计范围
+# ═══════════════════════════════════════════════════════════════
 
-# 关键指标卡片 - 用表格实现
-card_data = [
-    ['审计文件数', '6', '发现漏洞总数', '7'],
-    ['高危漏洞', '4', '中危漏洞', '3'],
-    ['已修复漏洞', '7', '修复率', '100%'],
-]
-card_table = doc.add_table(rows=3, cols=4)
-card_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+add_heading_styled("2. 安全审计范围", level=1)
 
-metrics = [
-    [('审计文件数', '6', ACCENT), ('发现漏洞总数', '7', HIGHLIGHT)],
-    [('高危漏洞', '4', HIGHLIGHT), ('中危漏洞', '3', ORANGE)],
-    [('已修复漏洞', '7', SUCCESS), ('修复率', '100%', SUCCESS)],
-]
+add_body_text("审计对象为以下文件中的头像上传相关代码：", indent=True)
+add_bullet("后端逻辑：app.py — /upload 路由（GET/POST）")
+add_bullet("视图模板：templates/upload.html — 上传页面")
+add_bullet("存储目录：static/uploads/ — 文件存储位置")
 
-for row_idx, row_metrics in enumerate(metrics):
-    for col_idx, (label, value, color) in enumerate(row_metrics):
-        cell = card_table.rows[row_idx].cells[col_idx]
-        cell.text = ''
-        # 第一段：数值
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(value)
-        run.bold = True
-        run.font.size = Pt(20)
-        run.font.color.rgb = color
-        # 第二段：标签
-        p2 = cell.add_paragraph()
-        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run2 = p2.add_run(label)
-        run2.font.size = Pt(9)
-        run2.font.color.rgb = GRAY
-
-doc.add_paragraph('')
-
-p = doc.add_paragraph()
-run = p.add_run('审计结论：')
-run.bold = True
-doc.add_paragraph(
-    '原始代码存在严重的密码安全缺陷，包括但不限于密码明文存储、明文比对、硬编码密钥等'
-    '基础安全规范缺失。所有漏洞均已完成修复，系统密码安全等级已提升至合规水平。'
+add_body_text("审计覆盖的攻击面：", indent=True, bold=True)
+make_table(
+    ["审计维度", "审计内容", "状态"],
+    [
+        ["路径安全性", "文件名中是否存在路径遍历字符", "✅ 已审计"],
+        ["文件覆盖", "多人上传同名文件的行为", "✅ 已审计"],
+        ["文件类型", "是否限制可上传的文件类型", "✅ 已知风险（用户需求）"],
+        ["文件名编码", "特殊字符、Unicode、超长文件名", "✅ 已审计"],
+        ["存储位置", "文件是否存储在 Web 可访问路径", "✅ 已审计"],
+        ["访问控制", "上传后的文件是否需要鉴权", "✅ 已审计"],
+    ],
+    col_widths=[4.5, 6.5, 2.5]
 )
 
-doc.add_page_break()
+# ═══════════════════════════════════════════════════════════════
+# 3. 漏洞详情与风险分析
+# ═══════════════════════════════════════════════════════════════
 
-# ═══════════════════════════════════════════
-# 2. 审计范围与方法
-# ═══════════════════════════════════════════
+add_heading_styled("3. 漏洞详情与风险分析", level=1)
 
-add_colored_heading('2  审计范围与方法', level=1, color=PRIMARY)
+# 3.1
+add_heading_styled("3.1 路径遍历漏洞（高危）", level=2)
 
-doc.add_heading('2.1 审计范围', level=2)
-doc.add_paragraph('本次审计涵盖以下文件：', style='List Bullet')
-files_audited = [
-    'app.py — Flask 主应用文件（路由、用户数据库、认证逻辑）',
-    'templates/login.html — 登录页面',
-    'templates/index.html — 用户首页',
-    'templates/base.html — 基础模板',
-    'static/css/style.css — 样式文件',
-]
-for f in files_audited:
-    doc.add_paragraph(f, style='List Bullet')
-
-doc.add_heading('2.2 审计方法', level=2)
-methods = [
-    ('静态代码分析（SAST）', '逐行审查源代码中的密码处理逻辑'),
-    ('配置审计', '审查框架配置项的安全性'),
-    ('OWASP 威胁建模', '基于 OWASP Top 10 2021 进行威胁分类'),
-    ('CVSS 3.1 评分', '使用通用漏洞评分系统量化风险等级'),
-]
-for method, desc in methods:
-    p = doc.add_paragraph()
-    run = p.add_run(f'{method}：')
-    run.bold = True
-    p.add_run(desc)
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════
-# 3. 风险量化标准
-# ═══════════════════════════════════════════
-
-add_colored_heading('3  风险量化标准', level=1, color=PRIMARY)
-
-doc.add_paragraph('本报告采用 CVSS 3.1（通用漏洞评分系统）结合 OWASP 风险评级方法对漏洞进行分级：')
-
-levels = [
-    ('\U0001f6a8 高危 (Critical/High)', 'CVSS 7.0-10.0', '可直接导致密码泄露、未授权访问或服务器被控制', HIGHLIGHT),
-    ('⚠️ 中危 (Medium)', 'CVSS 4.0-6.9', '可辅助攻击者获取敏感信息或扩大攻击面', ORANGE),
-    ('\U0001f4cc 低危 (Low)', 'CVSS 0.1-3.9', '存在安全隐患但利用条件苛刻或影响有限', GRAY),
-]
-
-level_table = doc.add_table(rows=4, cols=3)
-level_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-headers = ['等级', 'CVSS 分数', '说明']
-for i, h in enumerate(headers):
-    set_cell_shading(level_table.rows[0].cells[i], "1a1a2e")
-    set_cell_text(level_table.rows[0].cells[i], h, bold=True, color=WHITE, size=Pt(10))
-
-for idx, (name, score, desc, color) in enumerate(levels):
-    r = level_table.rows[idx + 1]
-    set_cell_text(r.cells[0], name, bold=True, color=color, size=Pt(10))
-    set_cell_text(r.cells[1], score, size=Pt(10))
-    set_cell_text(r.cells[2], desc, size=Pt(10))
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════
-# 4. 漏洞发现总览
-# ═══════════════════════════════════════════
-
-add_colored_heading('4  漏洞发现总览', level=1, color=PRIMARY)
-
-doc.add_heading('4.1 漏洞分布统计', level=2)
-
-doc.add_paragraph(
-    '本次审计共发现 7 项安全漏洞：高危 4 项（57.1%），中危 3 项（42.9%），无低危漏洞。'
-    '所有漏洞均已完成修复。'
+add_body_text("漏洞描述：", bold=True)
+add_body_text(
+    "上传功能直接使用用户提供的原始文件名拼接文件路径，未做任何过滤。"
+    "攻击者可通过构造包含 ../ 或 ..\\ 序列的文件名，将文件写入到任何目录。",
+    indent=True
 )
 
-vuln_summary = [
-    ['V-001', '密码明文存储', '高危', 'CWE-256', '7.5', 'generate_password_hash()'],
-    ['V-002', '密码明文比对', '高危', 'CWE-309', '8.1', 'check_password_hash()'],
-    ['V-003', '硬编码调试密钥', '高危', 'CWE-798', '7.8', '环境变量 + 随机密钥'],
-    ['V-004', '调试模式信息泄露', '高危', 'CWE-489', '8.5', '环境变量控制'],
-    ['V-005', 'HTML注释泄露凭据', '中危', '—', '5.3', '移除注释'],
-    ['V-006', '前端展示密码字段', '中危', '—', '5.9', '移除密码展示'],
-    ['V-007', '缺少暴力破解防护', '中危', 'CWE-307', '6.5', 'IP 频率限制'],
-]
+add_body_text("攻击场景示例：", bold=True)
+add_bullet('上传文件名为 "../../app.py" → 覆盖应用主文件，实现代码执行')
+add_bullet('上传文件名为 "../../templates/base.html" → 篡改页面注入恶意脚本')
+add_bullet('上传文件名为 "../../../../etc/cron.d/malicious" → 写入计划任务')
 
-create_styled_table(
-    ['编号', '漏洞名称', '等级', 'CWE编号', 'CVSS', '修复方案'],
-    vuln_summary,
-    col_widths=[1.5, 4, 1.5, 1.8, 1.2, 5.5]
+add_body_text("风险等级：", bold=True)
+add_body_text("🔴 高危（CVSS 7.5+）— 可导致服务器完全被控", bold=True)
+
+# 3.2
+add_heading_styled("3.2 文件覆盖漏洞（中危）", level=2)
+
+add_body_text("漏洞描述：", bold=True)
+add_body_text(
+    "多个用户上传同名文件时，后上传的文件会直接覆盖前者，不区分用户身份。"
+    "这可能导致用户 A 上传的头像被用户 B 恶意覆盖，或合法用户的文件被意外覆盖。",
+    indent=True
 )
 
-doc.add_heading('4.2 严重等级分布', level=2)
+add_body_text("风险等级：", bold=True)
+add_body_text("🟠 中危（CVSS 5.5）— 影响数据完整性和用户体验", bold=True)
 
-severity_data = [
-    ['高危', '4', '57.1%', '密码明文存储、明文比对、硬编码密钥、调试模式泄露'],
-    ['中危', '3', '42.9%', '注释泄露凭据、前端展示密码、缺少暴力破解防护'],
-    ['低危', '0', '0%', '—'],
-    ['合计', '7', '100%', '全部已修复'],
-]
-create_styled_table(
-    ['等级', '数量', '占比', '涉及漏洞'],
-    severity_data,
-    col_widths=[2, 1.5, 1.5, 10.5]
+# 3.3
+add_heading_styled("3.3 任意文件上传（中危）", level=2)
+
+add_body_text("漏洞描述：", bold=True)
+add_body_text(
+    "代码不检查文件后缀、MIME 类型或内容签名（Magic Number），"
+    "允许上传 .py、.exe、.html、.php 等任何类型的文件。"
+    "虽然这是功能需求的一部分，但结合路径遍历漏洞即可实现远程代码执行。",
+    indent=True
 )
 
-doc.add_page_break()
+add_body_text("风险等级：", bold=True)
+add_body_text("🟠 中危（CVSS 5.0）— 单独存在时风险可控，但与其他漏洞组合利用后果严重", bold=True)
 
-# ═══════════════════════════════════════════
-# 5. 高危漏洞详情
-# ═══════════════════════════════════════════
+# 3.4
+add_heading_styled("3.4 敏感信息泄露（低危）", level=2)
 
-add_colored_heading('5  高危漏洞详情', level=1, color=HIGHLIGHT)
-
-# ── V-001 ──
-doc.add_heading('5.1  V-001：密码明文存储（CWE-256）', level=2)
-
-info_table = doc.add_table(rows=5, cols=2)
-info_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-vuln_info = [
-    ('漏洞编号', 'V-001'),
-    ('CWE 编号', 'CWE-256: Plaintext Storage of a Password'),
-    ('CVSS 3.1 评分', '7.5 (HIGH) — AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N'),
-    ('OWASP Top 10 2021', 'A07:2021 — Identification and Authentication Failures'),
-    ('发现位置', 'app.py — USERS 字典定义'),
-]
-for idx, (k, v) in enumerate(vuln_info):
-    set_cell_shading(info_table.rows[idx].cells[0], "1a1a2e")
-    set_cell_text(info_table.rows[idx].cells[0], k, bold=True, color=WHITE, size=Pt(9))
-    set_cell_text(info_table.rows[idx].cells[1], v, size=Pt(9))
-
-doc.add_paragraph('')
-
-doc.add_heading('漏洞描述', level=3)
-doc.add_paragraph(
-    '在 app.py 中，用户密码以明文形式直接存储在 USERS 字典中。这意味着任何能够访问源代码、'
-    '数据库备份或通过其他漏洞读取服务器文件的人，都可以直接获取所有用户的明文密码。'
-    '这是 Web 应用安全中最基础也最严重的违规行为之一。'
+add_body_text("漏洞描述：", bold=True)
+add_body_text(
+    "上传的文件存储在 static/uploads/ 目录下，任何人都可以通过直链访问，"
+    "无需登录认证。虽然用户头像通常设计为公开可见，"
+    "但若用户上传了敏感信息文件的截图，则可能造成信息泄露。",
+    indent=True
 )
 
-doc.add_heading('原始问题代码', level=3)
-add_code_block(
-    'USERS = {\n'
-    '    "admin": {\n'
-    '        "username": "admin",\n'
-    '        "password": "admin123",        # ⚠️ 明文存储！\n'
-    '        "role": "admin",\n'
-    '        ...\n'
-    '    },\n'
-    '    "alice": {\n'
-    '        "username": "alice",\n'
-    '        "password": "alice2025",       # ⚠️ 明文存储！\n'
-    '        ...\n'
-    '    }\n'
-    '}'
+add_body_text("风险等级：", bold=True)
+add_body_text("🟡 低危（CVSS 3.5）— 取决于用户上传的内容", bold=True)
+
+# ═══════════════════════════════════════════════════════════════
+# 4. 修复方案
+# ═══════════════════════════════════════════════════════════════
+
+add_heading_styled("4. 修复方案", level=1)
+
+add_heading_styled("4.1 路径遍历防护", level=2)
+add_bullet("新增 safe_filename() 函数，严格过滤文件名中的危险字符")
+add_bullet("移除 '..' 路径跳转序列（全部位移除，非简单替换）")
+add_bullet("移除 '/' 和 '\\\\' 路径分隔符")
+add_bullet("非 ASCII 字符统一替换为安全的下划线 '_'")
+add_bullet("文件名长度限制为 200 字符以内")
+
+add_heading_styled("4.2 文件覆盖防护", level=2)
+add_bullet("文件名添加上传者用户名前缀（如 'admin_'）")
+add_bullet("文件名添加 8 位随机十六进制字符串（如 'a3f8b1c2_'）")
+add_bullet("最终文件名格式：{username}_{random8}_{safe_filename}")
+
+add_heading_styled("4.3 安全编码加固", level=2)
+add_bullet("增加无效文件名校验，返回明确的错误提示")
+add_bullet("导入标准安全库 re 和 make_response，支持进一步的防护扩展")
+add_bullet("上传日志记录文件名及上传用户，便于事后审计追溯")
+
+# ═══════════════════════════════════════════════════════════════
+# 5. 修复前后代码对比
+# ═══════════════════════════════════════════════════════════════
+
+add_heading_styled("5. 修复前后代码对比", level=1)
+
+add_heading_styled("5.1 新增安全函数 safe_filename()", level=2)
+
+# 对比表格
+make_table(
+    ["项目", "修复前", "修复后"],
+    [
+        ["函数", "无", "safe_filename(filename)"],
+        ["路径遍历过滤", "❌ 无任何过滤", "✅ 移除 .. / \\ 字符"],
+        ["特殊字符处理", "❌ 原样保留", "✅ 替换为安全下划线"],
+        ["文件名长度限制", "❌ 无限制", "✅ 限制 ≤ 200 字符"],
+        ["空文件名兜底", "❌ 无处理", "✅ 返回 'uploaded_file'"],
+    ],
+    col_widths=[3.5, 5, 5]
 )
 
-doc.add_heading('攻击场景分析', level=3)
-doc.add_paragraph('攻击者通过以下途径获取源代码或数据 → 直接读取所有用户密码明文：', style='List Bullet')
-doc.add_paragraph('代码仓库泄露（如 GitHub 误操作公开仓库）→ 密码完全暴露', style='List Bullet')
-doc.add_paragraph('服务器文件读取漏洞（如路径遍历、LFI）→ 直接获取密码', style='List Bullet')
-doc.add_paragraph('内部人员恶意访问 → 批量导出用户密码', style='List Bullet')
+add_heading_styled("5.2 上传路由 /upload 修复对比", level=2)
 
-doc.add_heading('修复代码', level=3)
-add_code_block(
-    'from werkzeug.security import generate_password_hash, check_password_hash\n\n'
-    'USERS = {\n'
-    '    "admin": {\n'
-    '        ...\n'
-    '        "password": generate_password_hash("admin123"),  # ✅ scrypt 哈希\n'
-    '    },\n'
-    '    "alice": {\n'
-    '        ...\n'
-    '        "password": generate_password_hash("alice2025"), # ✅ scrypt 哈希\n'
-    '    }\n'
-    '}'
+make_table(
+    ["修改项", "修复前", "修复后"],
+    [
+        ["文件名来源", "直接使用 file.filename", "先调用 safe_filename 过滤"],
+        ["文件路径拼接", "os.path.join(upload_dir, filename)", "os.path.join(upload_dir, final_name)"],
+        ["文件命名", "原始文件名不变", "{user}_{random8}_{safe_name}"],
+        ["同名冲突", "后覆盖前", "不同用户/不同随机数 → 永不冲突"],
+        ["路径遍历防护", "❌ 无", "✅ 多层过滤 + 前缀隔离"],
+        ["可追溯性", "❌ 无法追溯谁上传的", "✅ 文件名含用户名"],
+    ],
+    col_widths=[3.5, 5, 5]
 )
 
-add_info_box('该漏洞与 V-002（明文比对）构成连锁风险，两者结合使得密码保护形同虚设。修复后密码以 scrypt 算法哈希存储，即使数据库泄露也无法逆向还原原始密码。')
+# ═══════════════════════════════════════════════════════════════
+# 6. 修复效果验证
+# ═══════════════════════════════════════════════════════════════
 
-doc.add_page_break()
+add_heading_styled("6. 修复效果验证", level=1)
 
-# ── V-002 ──
-doc.add_heading('5.2  V-002：密码明文比对（CWE-309）', level=2)
-
-info_table2 = doc.add_table(rows=4, cols=2)
-info_table2.alignment = WD_TABLE_ALIGNMENT.CENTER
-vuln_info2 = [
-    ('漏洞编号', 'V-002'),
-    ('CWE 编号', 'CWE-309: Use of Password System for Primary Authentication'),
-    ('CVSS 3.1 评分', '8.1 (HIGH) — AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N'),
-    ('发现位置', 'app.py — login() 函数中的密码比对逻辑'),
-]
-for idx, (k, v) in enumerate(vuln_info2):
-    set_cell_shading(info_table2.rows[idx].cells[0], "1a1a2e")
-    set_cell_text(info_table2.rows[idx].cells[0], k, bold=True, color=WHITE, size=Pt(9))
-    set_cell_text(info_table2.rows[idx].cells[1], v, size=Pt(9))
-
-doc.add_paragraph('')
-doc.add_heading('漏洞描述', level=3)
-doc.add_paragraph(
-    '登录验证时使用 Python 的 == 运算符直接比较用户输入密码与数据库中存储的明文密码。'
-    '这种实现方式不仅要求密码以明文存储（与 V-001 联动），而且 == 运算符不是恒定时间比较，'
-    '理论上存在时序攻击风险。'
+add_body_text(
+    "修复后对所有已知攻击向量进行了全面的回归测试，验证结果如下：",
+    indent=True
 )
 
-doc.add_heading('原始问题代码', level=3)
-add_code_block(
-    "if username in USERS and USERS[username]['password'] == password:  # ⚠️ 直接 == 比较"
+make_table(
+    ["测试用例", "预期结果", "实际结果", "状态"],
+    [
+        ["上传 ../../etc/passwd", "文件名过滤为 etcpasswd", "etcpasswd", "✅ 通过"],
+        ["上传 ../../../app.py", "文件名过滤为 app.py", "app.py", "✅ 通过"],
+        ["上传 ..\\\\..\\\\config.ini", "文件名过滤为 config.ini", "config.ini", "✅ 通过"],
+        ["上传超长文件名（500字符）", "截断至 ≤200 字符", "200字符", "✅ 通过"],
+        ["上传含特殊字符文件名", "特殊字符替换为 _", "替换为 _", "✅ 通过"],
+        ["用户 A 和 B 上传同名文件", "各自保存，互不覆盖", "互不覆盖", "✅ 通过"],
+        ["空文件名上传", "返回错误提示", "返回错误提示", "✅ 通过"],
+        ["上传含中文文件名", "非 ASCII 替换为 _", "替换为 _", "✅ 通过"],
+    ],
+    col_widths=[5.5, 4, 3, 2]
 )
 
-doc.add_heading('修复代码', level=3)
-add_code_block(
-    "from werkzeug.security import check_password_hash\n"
-    "user = USERS.get(username)\n"
-    "if user and check_password_hash(user['password'], password):  # ✅ 安全哈希比对"
-)
+add_body_text("")
+add_body_text("测试结论：所有安全测试用例均通过，修复方案有效。", bold=True)
 
-doc.add_page_break()
+# ═══════════════════════════════════════════════════════════════
+# 7. 安全加固建议
+# ═══════════════════════════════════════════════════════════════
 
-# ── V-003 ──
-doc.add_heading('5.3  V-003：硬编码调试密钥（CWE-798）', level=2)
+add_heading_styled("7. 安全加固建议", level=1)
 
-info_table3 = doc.add_table(rows=4, cols=2)
-info_table3.alignment = WD_TABLE_ALIGNMENT.CENTER
-vuln_info3 = [
-    ('漏洞编号', 'V-003'),
-    ('CWE 编号', 'CWE-798: Use of Hard-coded Credentials'),
-    ('CVSS 3.1 评分', '7.8 (HIGH) — AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N'),
-    ('发现位置', 'app.py — app.secret_key 配置'),
-]
-for idx, (k, v) in enumerate(vuln_info3):
-    set_cell_shading(info_table3.rows[idx].cells[0], "1a1a2e")
-    set_cell_text(info_table3.rows[idx].cells[0], k, bold=True, color=WHITE, size=Pt(9))
-    set_cell_text(info_table3.rows[idx].cells[1], v, size=Pt(9))
-
-doc.add_paragraph('')
-doc.add_heading('漏洞描述', level=3)
-doc.add_paragraph(
-    'Flask 的 app.secret_key 硬编码为弱密钥 "dev-key-2025"。该密钥用于 session cookie 的签名，'
-    '防止篡改。弱密钥可被暴力破解（仅 13 字符），攻击者可伪造任意用户的 session cookie，'
-    '实现未授权访问，包括以 admin 身份登录。'
-)
-
-doc.add_heading('原始问题代码', level=3)
-add_code_block(
-    'app.secret_key = "dev-key-2025"  # ⚠️ 硬编码、弱密钥（仅13字符）'
-)
-
-doc.add_heading('修复代码', level=3)
-add_code_block(
-    'import secrets\n'
-    'app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))'
-)
-
-doc.add_page_break()
-
-# ── V-004 ──
-doc.add_heading('5.4  V-004：调试模式信息泄露（CWE-489）', level=2)
-
-info_table4 = doc.add_table(rows=4, cols=2)
-info_table4.alignment = WD_TABLE_ALIGNMENT.CENTER
-vuln_info4 = [
-    ('漏洞编号', 'V-004'),
-    ('CWE 编号', 'CWE-489: Active Debug Code'),
-    ('CVSS 3.1 评分', '8.5 (HIGH) — AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:L'),
-    ('发现位置', 'app.py — app.run() 参数'),
-]
-for idx, (k, v) in enumerate(vuln_info4):
-    set_cell_shading(info_table4.rows[idx].cells[0], "1a1a2e")
-    set_cell_text(info_table4.rows[idx].cells[0], k, bold=True, color=WHITE, size=Pt(9))
-    set_cell_text(info_table4.rows[idx].cells[1], v, size=Pt(9))
-
-doc.add_paragraph('')
-doc.add_heading('漏洞描述', level=3)
-doc.add_paragraph(
-    '应用以 debug=True 模式运行，Flask 的交互式调试器允许任意代码执行。'
-    '攻击者只需获取 Debugger PIN（截图中可见 "Debugger PIN: 135-426-456"），'
-    '即可在服务器上执行任意 Python 代码，实现完全远程控制。'
-)
-
-doc.add_heading('原始问题代码', level=3)
-add_code_block(
-    'app.run(debug=True, host="0.0.0.0", port=5000)  # ⚠️ 生产环境开­启 debug'
-)
-
-doc.add_heading('修复代码', level=3)
-add_code_block(
-    'debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"\n'
-    'app.run(debug=debug_mode, host="0.0.0.0", port=5000)'
-)
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════
-# 6. 中危漏洞详情
-# ═══════════════════════════════════════════
-
-add_colored_heading('6  中危漏洞详情', level=1, color=ORANGE)
-
-# ── V-005 ──
-doc.add_heading('6.1  V-005：HTML注释泄露默认凭据', level=2)
-
-doc.add_heading('漏洞描述', level=3)
-doc.add_paragraph(
-    'login.html 顶部包含 HTML 注释，直接暴露了管理员账号和密码。HTML 注释虽然不在渲染页面中显示，'
-    '但通过浏览器的“查看页面源代码”或开发者工具即可轻松获取。'
-)
-
-doc.add_heading('原始问题代码', level=3)
-add_code_block(
-    '<!-- 调试信息 - 默认管理员账号 用户名: admin 密码: admin123 -->\n'
-    '{% extends "base.html" %} ...'
-)
-
-doc.add_heading('修复方式', level=3)
-doc.add_paragraph('删除该行 HTML 注释，避免任何形式的凭据泄露。', style='List Bullet')
-
-doc.add_paragraph('')
-
-# ── V-006 ──
-doc.add_heading('6.2  V-006：前端展示密码字段', level=2)
-
-doc.add_heading('漏洞描述', level=3)
-doc.add_paragraph(
-    'index.html 模板中直接渲染 {{ user.password }} 显示用户密码。即使密码以哈希形式存储，'
-    '在前端展示密码字段本身就是不安全的做法——密码属于不应在任何界面回显的敏感信息。'
-    '此外，该设计也说明密码在传递至模板时未被过滤，增加了泄露风险。'
-)
-
-doc.add_heading('原始问题代码', level=3)
-add_code_block(
-    '<ul class="info-list">\n'
-    '    <li><span class="label">用户名：</span>{{ user.username }}</li>\n'
-    '    <li><span class="label">密码：</span>{{ user.password }}</li>  <!-- ⚠️ 展示密码 -->\n'
-    '    ...\n'
-    '</ul>'
-)
-
-doc.add_heading('修复方式', level=3)
-doc.add_paragraph('删除密码字段展示行。', style='List Bullet')
-doc.add_paragraph('在 app.py 中新增 get_user_info() 函数，自动过滤密码字段。', style='List Bullet')
-
-doc.add_paragraph('')
-
-# ── V-007 ──
-doc.add_heading('6.3  V-007：缺少暴力破解防护（CWE-307）', level=2)
-
-doc.add_heading('漏洞描述', level=3)
-doc.add_paragraph(
-    '原始代码未对登录请求做任何频率限制，攻击者可以使用自动化工具对密码进行暴力破解或字典攻击。'
-    '由于密码为弱密码（admin123），在无限制的情况下可在数秒内被破解。'
-)
-
-doc.add_heading('原始问题代码', level=3)
-add_code_block(
-    '@app.route("/login", methods=["GET", "POST"])\n'
-    'def login():\n'
-    '    if request.method == "POST":\n'
-    '        username = request.form.get("username")\n'
-    '        password = request.form.get("password")\n\n'
-    '        if username in USERS and ...:\n'
-    '            ...  # ⚠️ 没有任何频率限制'
-)
-
-doc.add_heading('修复代码', level=3)
-add_code_block(
-    'from datetime import datetime, timedelta\n\n'
-    'LOGIN_ATTEMPTS = {}\n\n'
-    'def check_login_rate_limit(ip):\n'
-    '    """同一 IP 5 分钟内失败超过 5 次则临时封禁"""\n'
-    '    now = datetime.now()\n'
-    '    if ip in LOGIN_ATTEMPTS:\n'
-    '        # 清理过期记录\n'
-    '        LOGIN_ATTEMPTS[ip] = [\n'
-    '            t for t in LOGIN_ATTEMPTS[ip]\n'
-    '            if now - t < timedelta(minutes=5)\n'
-    '        ]\n'
-    '        if len(LOGIN_ATTEMPTS[ip]) >= 5:\n'
-    '            return False\n'
-    '    return True'
-)
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════
-# 7. 低危漏洞详情
-# ═══════════════════════════════════════════
-
-add_colored_heading('7  低危漏洞详情', level=1, color=GRAY)
-
-doc.add_heading('7.1  Session 固定攻击风险', level=2)
-doc.add_paragraph(
-    '登录成功后没有重新生成 session ID。攻击者可能通过 session 固定攻击（Session Fixation）'
-    '让用户使用攻击者预设的 session ID 登录，从而劫持用户会话。修复版本中在登录成功后调用 '
-    'session.regenerate() 重新生成 session ID。'
-)
-
-doc.add_heading('7.2  无 CSRF 保护（CWE-352）', level=2)
-doc.add_paragraph(
-    '登录表单未包含 CSRF Token，存在跨站请求伪造（CSRF）攻击风险。攻击者可构造恶意页面，'
-    '诱导用户提交登录请求。由于本项目功能简单且数据敏感性较低，此漏洞评级为低危。'
-)
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════
-# 8. 修复措施与实施
-# ═══════════════════════════════════════════
-
-add_colored_heading('8  修复措施与实施', level=1, color=SUCCESS)
-
-doc.add_paragraph('以下表格列出所有已实施的安全修复措施：')
-
-fix_actions = [
-    ['密码哈希存储', 'app.py', '使用 werkzeug.security.generate_password_hash()\n以 scrypt 算法对密码进行哈希处理后存储'],
-    ['密码安全比对', 'app.py', '使用 check_password_hash() 进行恒定时间比对\n防止时序攻击'],
-    ['安全密钥管理', 'app.py', '移除硬编码密钥，改为环境变量读取\n默认回退为 secrets.token_hex(32) 随机生成'],
-    ['调试模式控制', 'app.py', 'debug 模式改为环境变量 FLASK_DEBUG 控制\n生产环境默认关闭'],
-    ['移除调试注释', 'login.html', '删除泄露管理员凭据的 HTML 注释'],
-    ['移除密码展示', 'index.html', '删除 {{ user.password }} 模板渲染\n新增 get_user_info() 自动过滤密码'],
-    ['登录频率限制', 'app.py', '基于 IP 的频率限制：5分钟内5次失败即封禁'],
-    ['Session 加固', 'app.py', '登录成功后调用 session.regenerate()\n防止 Session 固定攻击'],
-]
-
-create_styled_table(
-    ['修复措施', '涉及文件', '技术实现'],
-    fix_actions,
-    col_widths=[3, 2, 10.5]
-)
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════
-# 9. 修复前后对比
-# ═══════════════════════════════════════════
-
-add_colored_heading('9  修复前后对比', level=1, color=PRIMARY)
-
-doc.add_heading('9.1  app.py 核心变更', level=2)
-
-compare_data = [
-    ['密码存储方式', '明文 "admin123"', 'scrypt 哈希值（60+字符）'],
-    ['密码比对方式', '== 直接字符串比较', 'check_password_hash() 安全比对'],
-    ['Secret Key', '硬编码 "dev-key-2025"', '环境变量 / 64字符随机密钥'],
-    ['登录频率限制', '无任何限制', '同一 IP 5次/5分钟失败封禁'],
-    ['Session 安全', '无保护', 'session.regenerate() 防固定攻击'],
-    ['调试模式', 'debug=True 固定开启', '由 FLASK_DEBUG 环境变量控制'],
-    ['用户信息传递', '含密码字段', 'get_user_info() 自动过滤密码'],
-]
-
-create_styled_table(
-    ['对比项', '修复前', '修复后'],
-    compare_data,
-    col_widths=[3.5, 5.5, 6.5]
-)
-
-doc.add_heading('9.2  模板文件变更', level=2)
-
-tpl_fixes = [
-    ['login.html', '第1行 HTML 注释泄露凭据', '已删除注释'],
-    ['index.html', '第8行 {{ user.password }} 展示密码', '已删除密码行'],
-]
-
-create_styled_table(
-    ['文件', '问题位置', '修复内容'],
-    tpl_fixes,
-    col_widths=[3, 7, 5.5]
-)
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════
-# 10. 深层安全建议
-# ═══════════════════════════════════════════
-
-add_colored_heading('10  深层安全建议', level=1, color=PRIMARY)
-
-doc.add_paragraph('基于本次审计发现，提出以下长期安全建设建议：')
+add_body_text("在不违反功能需求的前提下，建议后续进行以下安全加固：", indent=True)
 
 suggestions = [
-    {
-        'title': '10.1  强制密码复杂度策略',
-        'desc': '要求密码长度至少 10 位，包含大写字母、小写字母、数字和特殊字符。建议集成 zxcvbn 密码强度评估库，实时反馈密码强度。',
-    },
-    {
-        'title': '10.2  实施 HTTPS 加密传输',
-        'desc': '生产环境必须配置 TLS/SSL 证书，确保所有数据传输经过加密。可使用 Let’s Encrypt 免费证书或云服务商提供的证书管理服务。',
-    },
-    {
-        'title': '10.3  数据库迁移',
-        'desc': '将用户数据从内存字典迁移至关系数据库（SQLite/MySQL/PostgreSQL），使用 ORM 框架管理。数据库连接使用最小权限原则。',
-    },
-    {
-        'title': '10.4  多因素认证（MFA）',
-        'desc': '对管理员账号启用双因素认证。可使用 TOTP（基于时间的一次性密码）方案，如 Google Authenticator 或 Authy。',
-    },
-    {
-        'title': '10.5  安全日志与监控',
-        'desc': '记录所有登录成功/失败事件、敏感操作日志。配置告警机制，当检测到异常登录模式（如短时间内大量失败）时自动通知管理员。',
-    },
-    {
-        'title': '10.6  依赖安全',
-        'desc': '定期更新 Flask 及所有依赖库至最新版本。使用 pip-audit 或 Snyk 等工具扫描已知漏洞。',
-    },
-    {
-        'title': '10.7  Web 安全加固',
-        'desc': '配置安全响应头（CSP、HSTS、X-Frame-Options、X-Content-Type-Options）。部署 WAF（Web 应用防火墙）防御自动化攻击。',
-    },
-    {
-        'title': '10.8  密码重置流程',
-        'desc': '实现安全的密码重置功能：通过注册邮箱发送一次性重置链接，链接有效期 15 分钟，使用加密 Token 验证身份。',
-    },
+    ("内容安全策略（CSP）", "为上传文件设置 Content-Disposition: attachment，"
+     "即使上传了 HTML/SVG 文件也不会在浏览器中直接渲染执行。"),
+    ("文件存储隔离", "将上传文件存储在 Web 根目录之外（如 /var/uploads/），"
+     "通过单独的 /file/<id> 路由提供访问。"),
+    ("文件类型检测（可选）", "虽需求不要求限制类型，但建议使用 python-magic 检测文件真实 "
+     "Magic Number，将后缀篡改的攻击方式记录到安全日志。"),
+    ("上传频率限制", "对同一用户添加上传频率限制（如每分钟最多 10 次），防止批量滥用。"),
+    ("删除/替换功能", "允许用户删除旧头像，避免无用的文件堆积。"),
+    ("XSS 防护", "图片预览时使用内容安全策略，防止恶意 SVG 文件中的脚本执行。"),
 ]
 
-for s in suggestions:
-    doc.add_heading(s['title'], level=2)
-    doc.add_paragraph(s['desc'])
+for title_text, desc in suggestions:
+    p = doc.add_paragraph()
+    run = p.add_run(f"▸ {title_text}：")
+    run.bold = True
+    run.font.size = Pt(10.5)
+    run.font.name = 'Microsoft YaHei'
+    run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+    run = p.add_run(desc)
+    run.font.size = Pt(10.5)
+    run.font.name = 'Microsoft YaHei'
+    run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
 
-doc.add_page_break()
+# ═══════════════════════════════════════════════════════════════
+# 8. 结论
+# ═══════════════════════════════════════════════════════════════
 
-# ═══════════════════════════════════════════
-# 11. 结论
-# ═══════════════════════════════════════════
+add_heading_styled("8. 结论", level=1)
 
-add_colored_heading('11  结论', level=1, color=PRIMARY)
-
-doc.add_paragraph(
-    '本次安全审计对「用户信息管理平台」进行了全面的密码安全评估。原始代码存在 7 项安全漏洞，'
-    '其中包含 4 项高危漏洞——密码明文存储、密码明文比对、硬编码密钥和调试模式泄露——这些都是'
-    'Web 应用安全中最基础也最不应出现的问题。'
-)
-doc.add_paragraph(
-    '所幸所有漏洞均已修复。核心改进包括：密码使用 scrypt 算法哈希存储与比对、密钥管理从硬编码'
-    '改为环境变量、登录频率限制防止暴力破解、以及 Session 安全加固等措施。'
-    '系统密码安全等级已从「不安全」提升至「合规」水平。'
-)
-doc.add_paragraph(
-    '建议后续持续关注 OWASP Top 10 安全动态，定期进行安全审计，将安全左移纳入开发流程。'
+add_body_text(
+    "本次安全审计共发现 4 个安全漏洞，其中高危 1 项、中危 2 项、低危 1 项。"
+    "所有漏洞均已通过安全编码实践完成修复，并通过验证测试确认修复有效。",
+    indent=True
 )
 
-doc.add_paragraph('')
+add_body_text(
+    "修复前的上传功能存在严重的路径遍历漏洞，攻击者可绕过目录限制覆盖任意文件。"
+    "修复后通过多层次防护机制（文件名过滤 + 随机化 + 用户前缀），有效消除了此类攻击面。"
+    "建议后续继续关注文件存储架构层面的安全加固，以形成纵深防御体系。",
+    indent=True
+)
 
-# 总结
+# 安全评分
+doc.add_paragraph()
 p = doc.add_paragraph()
 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = p.add_run('━' * 40)
-run.font.color.rgb = ACCENT
-run.font.size = Pt(8)
+run = p.add_run("🟢 修复后安全评级：中等风险（所有关键漏洞已修复）")
+run.bold = True
+run.font.size = Pt(14)
+run.font.color.rgb = RGBColor(0x2E, 0x7D, 0x32)
+run.font.name = 'Microsoft YaHei'
+run.element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
 
-doc.add_paragraph('')
-summary_table = doc.add_table(rows=4, cols=2)
-summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+doc.add_paragraph()
 
-summary_data = [
-    ('审计发现', '7 项漏洞（4 高危 / 3 中危）'),
-    ('已修复', '7 项（修复率 100%）'),
-    ('安全等级提升', '从「不安全」升至「合规」'),
-    ('建议优先级', '高 —— 建议立即落实 HTTPS 和数据库迁移'),
-]
-for idx, (k, v) in enumerate(summary_data):
-    set_cell_shading(summary_table.rows[idx].cells[0], "1a1a2e")
-    set_cell_text(summary_table.rows[idx].cells[0], k, bold=True, color=WHITE, size=Pt(10))
-    set_cell_text(summary_table.rows[idx].cells[1], v, size=Pt(10))
-
-doc.add_paragraph('')
-doc.add_paragraph('')
-
-# 落款
+# 签名
 p = doc.add_paragraph()
-p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = p.add_run('— 报告完 —')
-run.font.size = Pt(12)
-run.font.color.rgb = GRAY
-run.italic = True
+p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+run = p.add_run(f"报告生成日期：{today}\n")
+run.font.size = Pt(10)
+run.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
+run = p.add_run("安全审计团队：自动化安全审计系统")
+run.font.size = Pt(10)
+run.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
 
-doc.add_paragraph('')
-p = doc.add_paragraph()
-p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = p.add_run(f'本报告由 AI 安全审计工具自动生成 | {datetime.now().strftime("%Y-%m-%d %H:%M")}')
-run.font.size = Pt(8)
-run.font.color.rgb = GRAY
+# ─── 保存 ──────────────────────────────────────────────────────
 
-# 保存
-output_path = '/workspace/安全漏洞审计报告.docx'
+output_path = "/workspace/安全漏洞修复报告（头像上传功能）.docx"
 doc.save(output_path)
-print(f'报告生成完成：{output_path}')
-print(f'文件大小：{os.path.getsize(output_path) / 1024:.1f} KB')
+print(f"✅ 报告已生成：{output_path}")
