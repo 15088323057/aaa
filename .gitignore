@@ -8,3 +8,4 @@ venv/
 .DS_Store
 *.db
 data/
+static/uploads/
