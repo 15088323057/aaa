@@ -1,10 +1,11 @@
 import os
 import secrets
 import sqlite3
+import re
 from functools import wraps
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, redirect, session, abort, send_file, flash, url_for
+from flask import Flask, render_template, request, redirect, session, abort, send_file, flash, url_for, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -219,6 +220,19 @@ def search():
 
 # ─── 登出 ───────────────────────────────────────────────────────
 
+
+def safe_filename(filename):
+    """过滤路径遍历字符，防止攻击者通过文件名逃逸到其他目录"""
+    # 移除路径分隔符和转义字符
+    filename = filename.replace("..", "").replace("/", "").replace("\\", "")
+    # 只保留安全的 ASCII 字符
+    filename = re.sub(r'[^a-zA-Z0-9._-]', '_', filename)
+    # 限制文件名长度
+    if len(filename) > 200:
+        name, ext = os.path.splitext(filename)
+        filename = name[:190] + ext
+    return filename or "uploaded_file"
+
 @app.route("/logout")
 def logout():
     session.clear()
@@ -241,11 +255,19 @@ def upload_avatar():
         upload_dir = os.path.join(app.static_folder, "uploads")
         os.makedirs(upload_dir, exist_ok=True)
 
-        filename = file.filename
-        filepath = os.path.join(upload_dir, filename)
+        # 安全过滤文件名，防止路径遍历
+        raw_filename = file.filename
+        if not raw_filename:
+            return render_template("upload.html", error="无效的文件名")
+        safe_name = safe_filename(raw_filename)
+
+        # 避免同名文件覆盖：加入用户名和随机数前缀
+        rand_suffix = secrets.token_hex(4)
+        final_name = f"{session['username']}_{rand_suffix}_{safe_name}"
+        filepath = os.path.join(upload_dir, final_name)
         file.save(filepath)
 
-        file_url = url_for("static", filename=f"uploads/{filename}")
+        file_url = url_for("static", filename=f"uploads/{final_name}")
         return render_template("upload.html", success=True, file_url=file_url)
 
     return render_template("upload.html")
