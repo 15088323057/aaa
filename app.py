@@ -4,10 +4,13 @@ import sqlite3
 from functools import wraps
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, redirect, session, abort, send_file, flash
+from flask import Flask, render_template, request, redirect, session, abort, send_file, flash, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+
+# 最大上传文件大小限制：16MB
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 # 使用环境变量或随机生成安全密钥
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
@@ -220,6 +223,32 @@ def search():
 def logout():
     session.clear()
     return redirect("/")
+
+
+# ─── 头像上传 ───────────────────────────────────────────────────
+
+@app.route("/upload", methods=["GET", "POST"])
+def upload_avatar():
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
+
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or file.filename == "":
+            return render_template("upload.html", error="请选择要上传的文件")
+
+        upload_dir = os.path.join(app.static_folder, "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        filename = file.filename
+        filepath = os.path.join(upload_dir, filename)
+        file.save(filepath)
+
+        file_url = url_for("static", filename=f"uploads/{filename}")
+        return render_template("upload.html", success=True, file_url=file_url)
+
+    return render_template("upload.html")
 
 
 # ─── 报告下载 ───────────────────────────────────────────────────
