@@ -40,7 +40,9 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             email TEXT,
-            phone TEXT
+            phone TEXT,
+            role TEXT DEFAULT 'user',
+            balance REAL DEFAULT 0.0
         )
     """)
 
@@ -54,6 +56,20 @@ def init_db():
             "INSERT OR IGNORE INTO users (username, password, email, phone) VALUES (?, ?, ?, ?)",
             (username, pw, email, phone),
         )
+
+    # 兼容旧表：尝试添加缺失的列（如果不存在则忽略）
+    for col_def in [
+        "ADD COLUMN role TEXT DEFAULT 'user'",
+        "ADD COLUMN balance REAL DEFAULT 0.0",
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE users {col_def}")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
+
+    # 更新 admin 的 role 和 balance
+    cursor.execute("UPDATE users SET role = 'admin', balance = 99999 WHERE username = 'admin'")
+    cursor.execute("UPDATE users SET role = 'user', balance = 100 WHERE username = 'alice'")
 
     conn.commit()
     conn.close()
@@ -91,6 +107,20 @@ def get_user_info(username):
         user.pop("id", None)
         return user
     return None
+
+
+def get_user_by_id(user_id):
+    """根据用户 ID 查询用户（用于个人中心）"""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, username, email, phone, role, balance FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if row:
+            return dict(row)
+        return None
+    finally:
+        conn.close()
 
 
 def check_login_rate_limit(ip):
@@ -271,6 +301,59 @@ def upload_avatar():
         return render_template("upload.html", success=True, file_url=file_url)
 
     return render_template("upload.html")
+
+
+# ─── 个人中心 ───────────────────────────────────────────────────
+
+@app.route("/profile")
+def profile():
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return "缺少 user_id 参数", 400
+
+    try:
+        user_id = int(user_id)
+    except ValueError:
+        return "无效的 user_id", 400
+
+    user = get_user_by_id(user_id)
+    if not user:
+        return "用户不存在", 404
+
+    return render_template("profile.html", user=user)
+
+
+# ─── 充值 ───────────────────────────────────────────────────────
+
+@app.route("/recharge", methods=["POST"])
+def recharge():
+    user_id = request.form.get("user_id")
+    amount = request.form.get("amount")
+
+    if not user_id or not amount:
+        return "缺少参数", 400
+
+    try:
+        user_id = int(user_id)
+        amount = float(amount)
+    except ValueError:
+        return "无效的参数", 400
+
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET balance = balance + ? WHERE id = ?",
+            (amount, user_id)
+        )
+        conn.commit()
+        print(f"💰 充值: user_id={user_id}, amount={amount}", flush=True)
+    except Exception as e:
+        print(f"❌ 充值失败: {e}", flush=True)
+        return "充值失败", 500
+    finally:
+        conn.close()
+
+    return redirect(f"/profile?user_id={user_id}")
 
 
 # ─── 报告下载 ───────────────────────────────────────────────────
