@@ -14,6 +14,11 @@
 
 <div class="card">
     <h2>充值</h2>
+
+    {% if error %}
+        <div class="error-msg">{{ error }}</div>
+    {% endif %}
+
     <form method="POST" action="/recharge" class="login-form">
         <input type="hidden" name="user_id" value="{{ user.id }}">
         <div class="form-group">

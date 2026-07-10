@@ -323,10 +323,15 @@ def profile():
     return render_template("profile.html", user=user)
 
 
-# ─── 充值 ───────────────────────────────────────────────────────
+# ─── 充值（已修复） ───────────────────────────────────────────────
 
 @app.route("/recharge", methods=["POST"])
 def recharge():
+    # 修复1：验证登录状态
+    session_username = session.get("username")
+    if not session_username:
+        return redirect("/login")
+
     user_id = request.form.get("user_id")
     amount = request.form.get("amount")
 
@@ -335,9 +340,25 @@ def recharge():
 
     try:
         user_id = int(user_id)
-        amount = float(amount)
+        amount = round(float(amount), 2)  # 修复2：金额四舍五入到2位小数
     except ValueError:
         return "无效的参数", 400
+
+    # 修复3：金额必须为正数
+    if amount <= 0:
+        return render_template("profile.html", user=get_user_by_id(user_id), error="充值金额必须大于零")
+
+    # 修复4：单次充值上限
+    if amount > 999999:
+        return render_template("profile.html", user=get_user_by_id(user_id), error="单次充值金额不能超过 999,999 元")
+
+    # 修复5：验证要充值的账号是否属于当前登录用户
+    target_user = get_user_by_id(user_id)
+    if not target_user:
+        return "用户不存在", 404
+    if target_user["username"] != session_username:
+        return render_template("profile.html", user=get_user_by_id(user_id),
+                               error="只能给自己的账号充值"), 403
 
     conn = get_db()
     try:
@@ -346,7 +367,7 @@ def recharge():
             (amount, user_id)
         )
         conn.commit()
-        print(f"💰 充值: user_id={user_id}, amount={amount}", flush=True)
+        print(f"💰 充值成功: user={session_username}, user_id={user_id}, amount={amount}", flush=True)
     except Exception as e:
         print(f"❌ 充值失败: {e}", flush=True)
         return "充值失败", 500
