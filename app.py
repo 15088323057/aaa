@@ -303,23 +303,21 @@ def upload_avatar():
     return render_template("upload.html")
 
 
-# ─── 个人中心 ───────────────────────────────────────────────────
+# ─── 个人中心（已修复 - 通过 session 获取当前用户） ─────────────
 
 @app.route("/profile")
 def profile():
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return "缺少 user_id 参数", 400
+    """个人中心：只能查看当前登录用户的资料"""
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
 
-    try:
-        user_id = int(user_id)
-    except ValueError:
-        return "无效的 user_id", 400
-
-    user = get_user_by_id(user_id)
+    user = get_user_by_username(username)
     if not user:
         return "用户不存在", 404
 
+    # 移除密码和ID，传给模板
+    user.pop("password", None)
     return render_template("profile.html", user=user)
 
 
@@ -332,49 +330,43 @@ def recharge():
     if not session_username:
         return redirect("/login")
 
-    user_id = request.form.get("user_id")
     amount = request.form.get("amount")
-
-    if not user_id or not amount:
+    if not amount:
         return "缺少参数", 400
 
     try:
-        user_id = int(user_id)
         amount = round(float(amount), 2)  # 修复2：金额四舍五入到2位小数
     except ValueError:
         return "无效的参数", 400
 
+    # 通过 session 获取当前用户
+    current_user = get_user_by_username(session_username)
+    if not current_user:
+        return "用户不存在", 404
+
     # 修复3：金额必须为正数
     if amount <= 0:
-        return render_template("profile.html", user=get_user_by_id(user_id), error="充值金额必须大于零")
+        return render_template("profile.html", user=current_user, error="充值金额必须大于零")
 
     # 修复4：单次充值上限
     if amount > 999999:
-        return render_template("profile.html", user=get_user_by_id(user_id), error="单次充值金额不能超过 999,999 元")
-
-    # 修复5：验证要充值的账号是否属于当前登录用户
-    target_user = get_user_by_id(user_id)
-    if not target_user:
-        return "用户不存在", 404
-    if target_user["username"] != session_username:
-        return render_template("profile.html", user=get_user_by_id(user_id),
-                               error="只能给自己的账号充值"), 403
+        return render_template("profile.html", user=current_user, error="单次充值金额不能超过 999,999 元")
 
     conn = get_db()
     try:
         conn.execute(
-            "UPDATE users SET balance = balance + ? WHERE id = ?",
-            (amount, user_id)
+            "UPDATE users SET balance = balance + ? WHERE username = ?",
+            (amount, session_username)
         )
         conn.commit()
-        print(f"💰 充值成功: user={session_username}, user_id={user_id}, amount={amount}", flush=True)
+        print(f"💰 充值成功: user={session_username}, amount={amount}", flush=True)
     except Exception as e:
         print(f"❌ 充值失败: {e}", flush=True)
         return "充值失败", 500
     finally:
         conn.close()
 
-    return redirect(f"/profile?user_id={user_id}")
+    return redirect("/profile")
 
 
 # ─── 报告下载 ───────────────────────────────────────────────────
