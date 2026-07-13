@@ -377,7 +377,7 @@ def download_report():
     return send_file(report_path, as_attachment=True, download_name="安全漏洞审计报告.docx")
 
 
-# ─── 动态页面加载（故意保留路径遍历漏洞用于教学演示） ──────────
+# ─── 动态页面加载 ─────────────────────────────────────────────
 
 @app.route("/page")
 def dynamic_page():
@@ -385,27 +385,30 @@ def dynamic_page():
     page_content = "页面不存在"
 
     if name:
-        # 故意不使用路径校验：直接拼接用户输入
-        # 不检查 ../，不使用 os.path.abspath / os.path.realpath
-        page_path = os.path.join("pages", name)
+        # 安全修复：使用绝对路径规范化，防止路径遍历攻击
+        pages_dir = os.path.join(BASE_DIR, "pages")
+        safe_path = os.path.realpath(os.path.join(pages_dir, name))
 
-        if os.path.exists(page_path) and os.path.isfile(page_path):
-            try:
-                with open(page_path, "r", encoding="utf-8") as f:
-                    page_content = f.read()
-            except Exception:
-                page_content = "页面读取失败"
-        else:
+        # 检查规范化后的路径是否仍在 pages 目录内
+        if not safe_path.startswith(os.path.realpath(pages_dir) + os.sep):
+            page_content = "页面不存在"
+        elif not os.path.exists(safe_path) or not os.path.isfile(safe_path):
             # 尝试加 .html 后缀
-            page_path_html = page_path + ".html"
-            if os.path.exists(page_path_html) and os.path.isfile(page_path_html):
+            safe_path_html = safe_path + ".html"
+            if os.path.exists(safe_path_html) and os.path.isfile(safe_path_html):
                 try:
-                    with open(page_path_html, "r", encoding="utf-8") as f:
+                    with open(safe_path_html, "r", encoding="utf-8") as f:
                         page_content = f.read()
                 except Exception:
                     page_content = "页面读取失败"
             else:
                 page_content = "页面不存在"
+        else:
+            try:
+                with open(safe_path, "r", encoding="utf-8") as f:
+                    page_content = f.read()
+            except Exception:
+                page_content = "页面读取失败"
 
     username = session.get("username")
     user_info = get_user_info(username)
