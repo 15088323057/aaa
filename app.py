@@ -377,6 +377,41 @@ def download_report():
     return send_file(report_path, as_attachment=True, download_name="安全漏洞审计报告.docx")
 
 
+# ─── 动态页面加载（故意保留路径遍历漏洞用于教学演示） ──────────
+
+@app.route("/page")
+def dynamic_page():
+    name = request.args.get("name", "")
+    page_content = "页面不存在"
+
+    if name:
+        # 故意不使用路径校验：直接拼接用户输入
+        # 不检查 ../，不使用 os.path.abspath / os.path.realpath
+        page_path = os.path.join("pages", name)
+
+        if os.path.exists(page_path) and os.path.isfile(page_path):
+            try:
+                with open(page_path, "r", encoding="utf-8") as f:
+                    page_content = f.read()
+            except Exception:
+                page_content = "页面读取失败"
+        else:
+            # 尝试加 .html 后缀
+            page_path_html = page_path + ".html"
+            if os.path.exists(page_path_html) and os.path.isfile(page_path_html):
+                try:
+                    with open(page_path_html, "r", encoding="utf-8") as f:
+                        page_content = f.read()
+                except Exception:
+                    page_content = "页面读取失败"
+            else:
+                page_content = "页面不存在"
+
+    username = session.get("username")
+    user_info = get_user_info(username)
+    return render_template("index.html", user=user_info, search_results=None, keyword="", page_content=page_content)
+
+
 # ─── 启动 ───────────────────────────────────────────────────────
 
 if __name__ == "__main__":

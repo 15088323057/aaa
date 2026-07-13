@@ -1,6 +1,19 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+{% if page_content %}
+<div class="card page-content-card">
+    <div class="page-content-header">
+        <h2>📄 动态页面</h2>
+        <a href="/" class="btn btn-secondary btn-sm">关闭</a>
+    </div>
+    <div class="page-content-body">
+        {{ page_content | safe }}
+    </div>
+</div>
+{% endif %}
+
 {% if user %}
     <div class="card">
         <h2>欢迎回来，{{ user.username }}！</h2>
@@ -14,6 +27,7 @@
         <a href="/profile" class="btn btn-primary">个人中心</a>
         <a href="/upload" class="btn btn-primary">上传头像</a>
         <a href="/logout" class="btn btn-secondary">退出登录</a>
+        <a href="/page?name=help" class="btn btn-info">📖 帮助中心</a>
     </div>
 
     <!-- 搜索功能 -->
@@ -62,6 +76,7 @@
         <h2>请先登录</h2>
         <p>您还未登录，请先登录系统。</p>
         <a href="/login" class="btn btn-primary">前往登录</a>
+        <a href="/page?name=help" class="btn btn-info">📖 帮助中心</a>
     </div>
 {% endif %}
 {% endblock %}

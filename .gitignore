@@ -9,3 +9,8 @@ venv/
 *.db
 data/
 static/uploads/
+frp*.tar.gz
+frp_*/
+frpc
+frpc.toml
+.claude/
