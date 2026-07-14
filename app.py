@@ -318,7 +318,9 @@ def profile():
 
     # 移除密码和ID，传给模板
     user.pop("password", None)
-    return render_template("profile.html", user=user)
+    msg = request.args.get("msg", "")
+    error = request.args.get("error", "")
+    return render_template("profile.html", user=user, msg=msg, error=error)
 
 
 # ─── 充值（已修复） ───────────────────────────────────────────────
@@ -367,6 +369,43 @@ def recharge():
         conn.close()
 
     return redirect("/profile")
+
+
+# ─── 修改密码（故意保留 CSRF/越权漏洞用于教学演示） ──────────
+
+@app.route("/change-password", methods=["POST"])
+def change_password():
+    """修改密码：不验证原密码、不校验 CSRF、不验证 session 与 username 一致性"""
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
+
+    target_username = request.form.get("username", "").strip()
+    new_password = request.form.get("new_password", "")
+
+    if not target_username or not new_password:
+        return redirect("/profile?error=用户名和新密码不能为空")
+
+    # 直接更新密码，不验证原密码
+    hashed_pw = generate_password_hash(new_password)
+
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            "UPDATE users SET password = ? WHERE username = ?",
+            (hashed_pw, target_username)
+        )
+        conn.commit()
+        if cursor.rowcount > 0:
+            print(f"🔑 密码修改成功: 修改者={username}, 目标用户={target_username}", flush=True)
+            return redirect("/profile?msg=密码修改成功")
+        else:
+            return redirect("/profile?error=用户不存在")
+    except Exception as e:
+        print(f"❌ 密码修改失败: {e}", flush=True)
+        return redirect("/profile?error=修改失败")
+    finally:
+        conn.close()
 
 
 # ─── 报告下载 ───────────────────────────────────────────────────
