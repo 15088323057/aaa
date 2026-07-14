@@ -19,6 +19,20 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 # 登录失败记录，用于简单速率限制
 LOGIN_ATTEMPTS = {}
 
+# ─── CSRF Token 生成 ──────────────────────────────────────────
+
+def generate_csrf_token():
+    """生成并存储 CSRF Token 到 session 中"""
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_hex(16)
+    return session["_csrf_token"]
+
+@app.before_request
+def ensure_csrf_token():
+    """每个请求前确保 session 中有 CSRF Token"""
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_hex(16)
+
 # 数据库路径（在 data/ 目录下）
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = os.path.join(BASE_DIR, "data")
@@ -165,6 +179,7 @@ def login():
         if user and check_password_hash(user["password"], password):
             LOGIN_ATTEMPTS.pop(client_ip, None)
             session.clear()
+            session["_csrf_token"] = secrets.token_hex(16)
             session["username"] = username
             user_info = get_user_info(username)
             return render_template("index.html", user=user_info, search_results=None, keyword="")
@@ -320,7 +335,8 @@ def profile():
     user.pop("password", None)
     msg = request.args.get("msg", "")
     error = request.args.get("error", "")
-    return render_template("profile.html", user=user, msg=msg, error=error)
+    csrf_token = generate_csrf_token()
+    return render_template("profile.html", user=user, msg=msg, error=error, csrf_token=csrf_token)
 
 
 # ─── 充值（已修复） ───────────────────────────────────────────────
@@ -371,36 +387,47 @@ def recharge():
     return redirect("/profile")
 
 
-# ─── 修改密码（故意保留 CSRF/越权漏洞用于教学演示） ──────────
+# ─── 修改密码（已修复） ─────────────────────────────────────
 
 @app.route("/change-password", methods=["POST"])
 def change_password():
-    """修改密码：不验证原密码、不校验 CSRF、不验证 session 与 username 一致性"""
+    """修改密码：验证 CSRF Token、验证原密码、仅允许修改自己的密码"""
     username = session.get("username")
     if not username:
         return redirect("/login")
 
-    target_username = request.form.get("username", "").strip()
+    # 修复1：验证 CSRF Token
+    csrf_token = request.form.get("_csrf_token", "")
+    if not csrf_token or csrf_token != session.get("_csrf_token", ""):
+        return redirect("/profile?error=请求验证失败，请刷新页面重试")
+
+    # 修复2：忽略表单中的 username，仅使用 session 中的当前用户
+    old_password = request.form.get("old_password", "")
     new_password = request.form.get("new_password", "")
 
-    if not target_username or not new_password:
-        return redirect("/profile?error=用户名和新密码不能为空")
+    if not old_password or not new_password:
+        return redirect("/profile?error=原密码和新密码不能为空")
 
-    # 直接更新密码，不验证原密码
+    # 修复3：验证原密码
+    user = get_user_by_username(username)
+    if not user:
+        return redirect("/login")
+
+    if not check_password_hash(user["password"], old_password):
+        return redirect("/profile?error=原密码错误")
+
+    # 更新密码
     hashed_pw = generate_password_hash(new_password)
 
     conn = get_db()
     try:
-        cursor = conn.execute(
+        conn.execute(
             "UPDATE users SET password = ? WHERE username = ?",
-            (hashed_pw, target_username)
+            (hashed_pw, username)
         )
         conn.commit()
-        if cursor.rowcount > 0:
-            print(f"🔑 密码修改成功: 修改者={username}, 目标用户={target_username}", flush=True)
-            return redirect("/profile?msg=密码修改成功")
-        else:
-            return redirect("/profile?error=用户不存在")
+        print(f"🔑 密码修改成功: {username}", flush=True)
+        return redirect("/profile?msg=密码修改成功")
     except Exception as e:
         print(f"❌ 密码修改失败: {e}", flush=True)
         return redirect("/profile?error=修改失败")
