@@ -30,6 +30,34 @@
         <a href="/page?name=help" class="btn btn-info">📖 帮助中心</a>
     </div>
 
+    <!-- URL 抓取功能 -->
+    <div class="card">
+        <h2>🌐 URL 抓取</h2>
+        <form method="POST" action="/fetch-url" class="search-form">
+            <div class="search-box">
+                <input type="text" id="url" name="url" placeholder="输入 URL（如 http://example.com）" value="{{ fetch_result.url if fetch_result else '' }}" class="search-input" required>
+                <button type="submit" class="btn btn-primary search-btn">抓取</button>
+            </div>
+        </form>
+    </div>
+
+    {% if fetch_result %}
+    <div class="card">
+        <h2>抓取结果</h2>
+        <div class="fetch-info">
+            <p><strong>目标 URL：</strong>{{ fetch_result.url }}</p>
+            <p><strong>状态码：</strong>{{ fetch_result.status_code }}</p>
+            {% if fetch_result.error %}
+                <p><strong>错误信息：</strong><span class="error-msg">{{ fetch_result.error }}</span></p>
+            {% endif %}
+        </div>
+        <div class="fetch-content">
+            <h3>响应内容（前 5000 字符）</h3>
+            <pre class="fetch-pre">{{ fetch_result.content }}</pre>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- 搜索功能 -->
     <div class="card">
         <h2>搜索用户</h2>

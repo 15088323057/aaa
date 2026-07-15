@@ -2,6 +2,8 @@ import os
 import secrets
 import sqlite3
 import re
+import urllib.request
+import urllib.error
 from functools import wraps
 from datetime import datetime, timedelta
 
@@ -433,6 +435,56 @@ def change_password():
         return redirect("/profile?error=修改失败")
     finally:
         conn.close()
+
+
+# ─── URL 抓取（故意保留 SSRF 漏洞用于教学演示） ─────────────
+
+@app.route("/fetch-url", methods=["POST"])
+def fetch_url():
+    """抓取 URL：不限制协议、不限制内网地址、不进行任何过滤"""
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
+
+    target_url = request.form.get("url", "").strip()
+    if not target_url:
+        return redirect("/")
+
+    # 不做任何限制：允许 http/https/file 等任意协议
+    # 不检查内网 IP 地址
+    # 不设置代理
+    result = {
+        "url": target_url,
+        "status_code": "N/A",
+        "content": "",
+        "error": None
+    }
+
+    try:
+        # 设置超时 10 秒，不做其他限制
+        response = urllib.request.urlopen(target_url, timeout=10)
+        result["status_code"] = response.getcode()
+        raw_content = response.read()
+        # 尝试解码，如果失败则显示原始字节前 5000 字符
+        try:
+            content_text = raw_content.decode("utf-8")
+        except UnicodeDecodeError:
+            content_text = raw_content.decode("utf-8", errors="replace")
+        result["content"] = content_text[:5000]
+    except urllib.error.HTTPError as e:
+        result["status_code"] = e.code
+        result["content"] = str(e)
+        result["error"] = f"HTTP 错误: {e.code}"
+    except urllib.error.URLError as e:
+        result["error"] = f"URL 错误: {e.reason}"
+        result["content"] = str(e)
+    except Exception as e:
+        result["error"] = f"抓取失败: {type(e).__name__}: {e}"
+        result["content"] = str(e)
+
+    # 渲染首页，传递抓取结果
+    user_info = get_user_info(username)
+    return render_template("index.html", user=user_info, search_results=None, keyword="", fetch_result=result)
 
 
 # ─── 报告下载 ───────────────────────────────────────────────────
