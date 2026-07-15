@@ -4,6 +4,9 @@ import sqlite3
 import re
 import urllib.request
 import urllib.error
+import urllib.parse
+import ipaddress
+import socket
 from functools import wraps
 from datetime import datetime, timedelta
 
@@ -437,11 +440,31 @@ def change_password():
         conn.close()
 
 
-# ─── URL 抓取（故意保留 SSRF 漏洞用于教学演示） ─────────────
+# ─── URL 抓取（已修复） ───────────────────────────────────
+
+def is_private_ip(hostname):
+    """检查 hostname 解析后的 IP 是否为内网/私有地址"""
+    try:
+        # 解析域名获取所有 IP 地址
+        addrs = socket.getaddrinfo(hostname, None)
+        for addr in addrs:
+            ip_str = addr[4][0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_private or ip.is_loopback or ip.is_link_local:
+                    return True
+                # 额外阻止云元数据 IP
+                if ip_str == "169.254.169.254":
+                    return True
+            except ValueError:
+                continue
+        return False
+    except socket.gaierror:
+        return False  # DNS 解析失败，让 urlopen 处理
 
 @app.route("/fetch-url", methods=["POST"])
 def fetch_url():
-    """抓取 URL：不限制协议、不限制内网地址、不进行任何过滤"""
+    """抓取 URL：修复 SSRF 漏洞，限制协议、阻止内网访问"""
     username = session.get("username")
     if not username:
         return redirect("/login")
@@ -450,9 +473,6 @@ def fetch_url():
     if not target_url:
         return redirect("/")
 
-    # 不做任何限制：允许 http/https/file 等任意协议
-    # 不检查内网 IP 地址
-    # 不设置代理
     result = {
         "url": target_url,
         "status_code": "N/A",
@@ -460,12 +480,28 @@ def fetch_url():
         "error": None
     }
 
+    # 修复1：只允许 http 和 https 协议
+    parsed = urllib.parse.urlparse(target_url)
+    if parsed.scheme not in ("http", "https"):
+        result["error"] = "仅允许 http 和 https 协议"
+        result["content"] = "不支持的协议: " + parsed.scheme
+        user_info = get_user_info(username)
+        return render_template("index.html", user=user_info, search_results=None, keyword="", fetch_result=result)
+
+    # 修复2：检查 hostname 是否为内网地址
+    hostname = parsed.hostname
+    if hostname:
+        if is_private_ip(hostname):
+            result["error"] = "不允许访问内网地址"
+            result["content"] = f"目标地址 {hostname} 解析为内网 IP，已阻止"
+            user_info = get_user_info(username)
+            return render_template("index.html", user=user_info, search_results=None, keyword="", fetch_result=result)
+
+    # 修复3：使用自定义 opener（不自动跟随 file:// 等协议）
     try:
-        # 设置超时 10 秒，不做其他限制
         response = urllib.request.urlopen(target_url, timeout=10)
         result["status_code"] = response.getcode()
         raw_content = response.read()
-        # 尝试解码，如果失败则显示原始字节前 5000 字符
         try:
             content_text = raw_content.decode("utf-8")
         except UnicodeDecodeError:
@@ -482,7 +518,6 @@ def fetch_url():
         result["error"] = f"抓取失败: {type(e).__name__}: {e}"
         result["content"] = str(e)
 
-    # 渲染首页，传递抓取结果
     user_info = get_user_info(username)
     return render_template("index.html", user=user_info, search_results=None, keyword="", fetch_result=result)
 
