@@ -7,6 +7,8 @@ import urllib.error
 import urllib.parse
 import ipaddress
 import socket
+import subprocess
+import platform
 from functools import wraps
 from datetime import datetime, timedelta
 
@@ -520,6 +522,46 @@ def fetch_url():
 
     user_info = get_user_info(username)
     return render_template("index.html", user=user_info, search_results=None, keyword="", fetch_result=result)
+
+
+# ─── Ping 网络诊断（故意保留命令注入漏洞用于教学演示） ─────
+
+@app.route("/ping", methods=["GET", "POST"])
+def ping():
+    """Ping 测试：使用 shell=True 执行系统命令，不校验用户输入"""
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
+
+    if request.method == "GET":
+        return render_template("ping.html", output=None)
+
+    # POST：接收 ip 参数，执行 ping 命令
+    ip = request.form.get("ip", "").strip()
+    if not ip:
+        return render_template("ping.html", output="请输入 IP 地址")
+
+    # 使用 f-string 拼接命令 + shell=True（故意保留命令注入漏洞）
+    command = f"ping -c 3 {ip}"
+    print(f"📡 执行命令: {command}", flush=True)
+
+    try:
+        output = subprocess.check_output(
+            command,
+            shell=True,
+            stderr=subprocess.STDOUT,
+            timeout=30
+        )
+        output_text = output.decode("utf-8", errors="replace")
+    except subprocess.CalledProcessError as e:
+        output_text = e.output.decode("utf-8", errors="replace") if e.output else f"命令执行失败，返回码: {e.returncode}"
+    except subprocess.TimeoutExpired:
+        output_text = "命令执行超时（30 秒）"
+    except Exception as e:
+        output_text = f"执行错误: {type(e).__name__}: {e}"
+
+    print(f"📡 命令输出:\n{output_text}", flush=True)
+    return render_template("ping.html", output=output_text)
 
 
 # ─── 报告下载 ───────────────────────────────────────────────────
