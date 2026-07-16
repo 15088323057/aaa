@@ -524,11 +524,32 @@ def fetch_url():
     return render_template("index.html", user=user_info, search_results=None, keyword="", fetch_result=result)
 
 
-# ─── Ping 网络诊断（故意保留命令注入漏洞用于教学演示） ─────
+# ─── Ping 网络诊断（已修复） ────────────────────────────
+
+def validate_ip_or_hostname(target):
+    """验证输入是否为合法的 IP 地址或主机名"""
+    if not target or len(target) > 255:
+        return False
+    # 允许合法 IP 地址（IPv4）
+    try:
+        ipaddress.ip_address(target)
+        return True
+    except ValueError:
+        pass
+    # 允许合法主机名（仅字母数字、点、短横线，不允许空格和特殊字符）
+    if re.match(r'^[a-zA-Z0-9.-]+$', target):
+        # 主机名不能以短横线开头或结尾
+        if target.startswith('-') or target.endswith('-'):
+            return False
+        # 主机名不能全部是数字（是纯数字但不是合法IP的情况也拒绝）
+        if re.match(r'^\d+(\.\d+)*$', target):
+            return False
+        return True
+    return False
 
 @app.route("/ping", methods=["GET", "POST"])
 def ping():
-    """Ping 测试：使用 shell=True 执行系统命令，不校验用户输入"""
+    """Ping 测试：使用参数列表方式执行命令，防止命令注入"""
     username = session.get("username")
     if not username:
         return redirect("/login")
@@ -539,16 +560,20 @@ def ping():
     # POST：接收 ip 参数，执行 ping 命令
     ip = request.form.get("ip", "").strip()
     if not ip:
-        return render_template("ping.html", output="请输入 IP 地址")
+        return render_template("ping.html", output="请输入 IP 地址或域名")
 
-    # 使用 f-string 拼接命令 + shell=True（故意保留命令注入漏洞）
-    command = f"ping -c 3 {ip}"
-    print(f"📡 执行命令: {command}", flush=True)
+    # 修复1：验证输入是否为合法的 IP 或主机名
+    if not validate_ip_or_hostname(ip):
+        return render_template("ping.html", output="输入格式不正确：仅允许合法的 IP 地址或主机名")
+
+    # 修复2：使用参数列表方式，不使用 shell=True
+    command_list = ["ping", "-c", "3", ip]
+    print(f"📡 执行命令: {' '.join(command_list)}", flush=True)
 
     try:
         output = subprocess.check_output(
-            command,
-            shell=True,
+            command_list,
+            shell=False,
             stderr=subprocess.STDOUT,
             timeout=30
         )
