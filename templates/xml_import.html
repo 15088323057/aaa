@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h2>📄 XML 数据导入</h2>
+    <p>输入 XML 数据，系统将解析并提取用户信息（name / email）。</p>
+    <form method="POST" action="/xml-import" class="login-form">
+        <div class="form-group">
+            <label for="xml_data">XML 数据</label>
+            <textarea id="xml_data" name="xml_data" rows="12" placeholder="&lt;data&gt;&#10;    &lt;user&gt;&#10;        &lt;name&gt;张三&lt;/name&gt;&#10;        &lt;email&gt;zhangsan@example.com&lt;/email&gt;&#10;    &lt;/user&gt;&#10;&lt;/data&gt;" class="xml-textarea" required>{{ request.form.get('xml_data', '') }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">导入</button>
+    </form>
+</div>
+
+{% if result %}
+<div class="card">
+    <h2>解析结果</h2>
+    {% if result.error %}
+        <div class="error-msg">{{ result.error }}</div>
+    {% endif %}
+    {% if result.users is defined %}
+        <pre class="json-result">{{ result | tojson(indent=2) }}</pre>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

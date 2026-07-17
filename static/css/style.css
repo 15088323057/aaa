@@ -343,3 +343,37 @@ body {
     max-height: 500px;
     overflow-y: auto;
 }
+
+/* ─── XML 导入 ──────────────────────────── */
+
+.xml-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    line-height: 1.6;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.xml-textarea:focus {
+    border-color: #4a90d9;
+    box-shadow: 0 0 0 3px rgba(74,144,217,0.15);
+    outline: none;
+}
+
+.json-result {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 500px;
+    overflow-y: auto;
+}
