@@ -591,11 +591,11 @@ def ping():
     return render_template("ping.html", output=output_text)
 
 
-# ─── XML 数据导入（故意保留 XXE 漏洞用于教学演示） ────────
+# ─── XML 数据导入（已修复） ────────────────────────────
 
 @app.route("/xml-import", methods=["GET", "POST"])
 def xml_import():
-    """XML 导入：检测 ENTITY/SYSTEM 并读取本地文件替换实体引用（XXE 漏洞）"""
+    """XML 导入：安全解析 XML，禁用外部实体处理"""
     username = session.get("username")
     if not username:
         return redirect("/login")
@@ -610,28 +610,10 @@ def xml_import():
 
     print(f"📄 收到 XML 数据:\n{xml_data}", flush=True)
 
-    # 检测 XML 中的 <!ENTITY 和 SYSTEM，提取文件路径并读取本地文件
-    entity_pattern = re.compile(r'<!ENTITY\s+\S+\s+SYSTEM\s+"([^"]+)"')
-    matches = entity_pattern.findall(xml_data)
-
-    for filepath in matches:
-        print(f"🔍 发现实体引用: SYSTEM \"{filepath}\"", flush=True)
-        # 处理 file:// 协议前缀
-        local_path = filepath
-        if local_path.startswith("file://"):
-            local_path = local_path[7:]
-        try:
-            with open(local_path, "r", encoding="utf-8") as f:
-                file_content = f.read()
-            # 将 &xxe; 实体引用替换为文件内容
-            xml_data = re.sub(r'&xxe;', file_content, xml_data)
-            print(f"📖 已读取文件: {filepath} ({len(file_content)} 字符)", flush=True)
-        except Exception as e:
-            print(f"❌ 读取文件失败: {filepath} - {e}", flush=True)
-            xml_data = re.sub(r'&xxe;', f"[文件读取失败: {e}]", xml_data)
-
-    # 解析替换后的 XML
+    # 修复：直接解析 XML，不处理外部实体
+    # Python 的 xml.etree.ElementTree 默认不解析 DTD 外部实体
     try:
+        # 安全解析 XML
         root = ET.fromstring(xml_data)
         users = []
         for user_elem in root.findall(".//user"):
